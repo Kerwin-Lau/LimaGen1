@@ -5,9 +5,16 @@ import os
 import talib
 import time
 import traceback
+import random
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from tqdm import tqdm
+import concurrent.futures
+from functools import partial
+import urllib3
+
+# 禁用 SSL 警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # 改进1：增强代码有效性验证
@@ -21,6 +28,9 @@ def safe_get_hk_data(symbol, start_date, end_date, max_retries=3):
     """带重试机制的数据获取"""
     for _ in range(max_retries):
         try:
+            # 添加100-200ms的随机延迟
+            time.sleep(random.uniform(0.5, 0.8))
+            
             df = ak.stock_hk_hist(
                 symbol=symbol,
                 period="daily",
@@ -59,13 +69,14 @@ def pad_stock_code(code):
 
 
 def get_date_range(years=5):
+    """生成动态时间范围"""
     end_date = datetime.now().strftime("%Y%m%d")
     start_date = (datetime.now() - relativedelta(years=years)).strftime("%Y%m%d")
     return start_date, end_date
 
 
 def calculate_ta_indicators(df):
-    """计算技术指标（包含BBI_DIF）"""
+    """计算技术指标（KDJ+BBI+MACD+资金指标）"""
     # KDJ指标
     df['K'], df['D'] = talib.STOCH(
         df['high'].values, df['low'].values, df['close'].values,
@@ -79,7 +90,6 @@ def calculate_ta_indicators(df):
     for p in periods:
         df[f'MA{p}'] = talib.SMA(df['close'], timeperiod=p)
     df['BBI'] = df[[f'MA{p}' for p in periods]].mean(axis=1)
-    # 新增BBI_DIF
     df['BBI_DIF'] = df['BBI'].diff().fillna(0)
 
     # MACD指标
@@ -90,7 +100,21 @@ def calculate_ta_indicators(df):
         signalperiod=9
     )
 
-    return df.drop(columns=[f'MA{p}' for p in periods])
+    # 计算短期资金指标
+    df['short_term_low'] = df['low'].rolling(window=3).min()
+    df['short_term_high'] = df['close'].rolling(window=3).max()
+    df['short_term_fund'] = 100 * (df['close'] - df['short_term_low']) / (df['short_term_high'] - df['short_term_low'])
+
+    # 计算长期资金指标
+    df['long_term_low'] = df['low'].rolling(window=21).min()
+    df['long_term_high'] = df['close'].rolling(window=21).max()
+    df['long_term_fund'] = 100 * (df['close'] - df['long_term_low']) / (df['long_term_high'] - df['long_term_low'])
+
+    # 删除临时列
+    df = df.drop(columns=[f'MA{p}' for p in periods] + 
+                 ['short_term_low', 'short_term_high', 'long_term_low', 'long_term_high'])
+
+    return df
 
 
 def process_and_save(price_df, save_path, symbol):
@@ -126,8 +150,10 @@ def process_and_save(price_df, save_path, symbol):
             )
 
         # 定义输出列
-        base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 'amplitude', 'change_pct', 'change_amount', 'turnover_rate']
-        ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD']
+        base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 
+                    'amplitude', 'change_pct', 'change_amount', 'turnover_rate']
+        ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 
+                  'short_term_fund', 'long_term_fund']
         output_columns = [col for col in (base_cols + ta_cols) if col in price_df.columns]
 
         price_df[output_columns].to_csv(save_path, index=False, encoding='utf_8_sig')
@@ -137,72 +163,108 @@ def process_and_save(price_df, save_path, symbol):
         raise
 
 
+def process_single_stock(raw_code, start_date, end_date, save_dir):
+    """处理单个股票的数据获取和保存"""
+    max_retries = 3
+    retry_delay = 5  # 重试延迟秒数
+    
+    for attempt in range(max_retries):
+        try:
+            save_path = os.path.join(save_dir, f"{raw_code}.csv")
+
+            # 文件存在性判断
+            if os.path.exists(save_path):
+                try:
+                    # 读取历史数据
+                    history_df = pd.read_csv(save_path, encoding='utf_8_sig')
+                    history_df['date'] = pd.to_datetime(history_df['date'])
+                    
+                    # 获取最新日期
+                    latest_date = history_df['date'].max()
+                    if latest_date >= pd.to_datetime(end_date):
+                        return f"⏩ 已是最新数据: {raw_code}"
+                    
+                    # 计算增量起始日期
+                    new_start = (latest_date + pd.Timedelta(days=1)).strftime("%Y%m%d")
+                    temp_price_df = safe_get_hk_data(raw_code, new_start, end_date)
+                    
+                    if not temp_price_df.empty:
+                        combined_price = pd.concat([history_df, temp_price_df])
+                    else:
+                        combined_price = history_df
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"重试 {raw_code} - 原因: {str(e)[:100]}")
+                        time.sleep(retry_delay)
+                        continue
+                    return f"❌ 处理历史数据失败: {str(e)[:100]}..."
+            else:
+                # 全量数据获取
+                combined_price = safe_get_hk_data(raw_code, start_date, end_date)
+                if combined_price.empty:
+                    return f"⚠️ 无数据: {raw_code}"
+
+            # 数据处理和保存
+            if not combined_price.empty:
+                process_and_save(combined_price, save_path, raw_code)
+                return f"✅ {raw_code}"
+            else:
+                return f"⚠️ 无效数据: {raw_code}"
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"重试 {raw_code} - 原因: {str(e)[:100]}")
+                time.sleep(retry_delay)
+                continue
+            return f"❌ 处理失败: {str(e)[:100]}..."
+
+
 def main():
     # 路径配置
-    csv_path = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\04_HSharesPro\HSharesPro.csv"
+    excel_path = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\04_HSharesPro\HSharesPro.xlsx"
     save_dir = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\04_HSharesPro\StocksData"
     os.makedirs(save_dir, exist_ok=True)
 
-    # 改进5：添加黑名单机制
-    BAD_CODES = set()
-
     try:
-        df = pd.read_csv(csv_path, header=None, dtype=str)
-        stock_codes = [pad_stock_code(c) for c in df[0].unique()]
-        stock_codes = [c for c in stock_codes if validate_hk_code(c) and c not in BAD_CODES]
+        # 读取Excel文件，跳过表头
+        df = pd.read_excel(excel_path, dtype={'股票代码': str})
+        stock_codes = df.iloc[:, 0].apply(pad_stock_code).dropna().unique().tolist()
         total = len(stock_codes)
     except Exception as e:
-        print(f"读取CSV文件失败: {e}")
+        print(f"读取Excel文件失败: {e}")
         return
 
+    # 获取日期范围
+    start_date, end_date = get_date_range()
+
+    # 创建进度条
     with tqdm(total=total, desc="🔄 数据处理进度") as pbar:
-        start_date, end_date = get_date_range()
-
-        for raw_code in stock_codes:
-            time.sleep(1)  # 请求间隔
-            try:
-                symbol = f"{raw_code}"  # 直接使用5位数字代码
-                save_path = os.path.join(save_dir, f"{raw_code}.csv")
-
-                # 历史数据处理逻辑
-                if os.path.exists(save_path):
-                    history_df = pd.read_csv(save_path, encoding='utf_8_sig')
-                    # 处理列名兼容性
-                    history_df = history_df.rename(columns={c: c.replace('\ufeff', '') for c in history_df.columns})
-                    history_df['date'] = pd.to_datetime(history_df['date'])
-
-                    latest_date = history_df['date'].max()
-                    if latest_date >= pd.to_datetime(end_date):
-                        pbar.update(1)
-                        continue
-
-                    new_start = (latest_date + pd.Timedelta(days=1)).strftime("%Y%m%d")
-                    temp_price_df = safe_get_hk_data(symbol, new_start, end_date)
-
-                    # 处理增量数据
-                    if not temp_price_df.empty:
-                        common_cols = list(set(history_df.columns) & set(temp_price_df.columns))
-                        combined_price = pd.concat([history_df[common_cols], temp_price_df[common_cols]])
-                    else:
-                        combined_price = history_df
-                else:
-                    # 全量数据获取
-                    full_price_df = safe_get_hk_data(symbol, start_date, end_date)
-                    combined_price = full_price_df
-
-                # 空数据跳过保存
-                if not combined_price.empty:
-                    process_and_save(combined_price, save_path, raw_code)
-                    pbar.set_postfix_str(f"✅ {raw_code}")
-                else:
-                    BAD_CODES.add(raw_code)
-                    print(f"⏭ 无效代码加入黑名单: {raw_code}")
-
-            except Exception as e:
-                print(f"❌ 处理失败: {raw_code} - {str(e)[:100]}")
-                BAD_CODES.add(raw_code)
-            finally:
-                pbar.update(1)
+        # 使用线程池进行并行处理
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # 创建偏函数，固定部分参数
+            process_func = partial(
+                process_single_stock,
+                start_date=start_date,
+                end_date=end_date,
+                save_dir=save_dir
+            )
+            
+            # 提交所有任务
+            future_to_stock = {
+                executor.submit(process_func, code): code
+                for code in stock_codes
+            }
+            
+            # 处理完成的任务
+            for future in concurrent.futures.as_completed(future_to_stock):
+                code = future_to_stock[future]
+                try:
+                    result = future.result()
+                    pbar.set_postfix_str(result)
+                except Exception as e:
+                    pbar.set_postfix_str(f"❌ 失败: {code}")
+                finally:
+                    pbar.update(1)
 
 
 if __name__ == "__main__":

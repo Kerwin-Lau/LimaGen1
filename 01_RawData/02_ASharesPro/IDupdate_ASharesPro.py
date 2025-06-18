@@ -20,11 +20,11 @@ def process_stock_code(code):
 def main():
     # 文件路径配置
     dir_path = r'D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesPro'
-    csv_path = os.path.join(dir_path, 'ASharesPro.csv')  # 假设文件名是ASharesPro.csv
+    excel_path = os.path.join(dir_path, 'ASharesPro.excel')  # 假设文件名是ASharesPro.csv
 
     try:
         # 读取CSV文件[6,10](@ref)
-        df = pd.read_csv(csv_path, header=None, dtype=str)
+        df = pd.read_excel(excel_path, header=None, dtype=str)
 
         # 处理第二列[9,11](@ref)
         df[1] = df[0].apply(process_stock_code)
@@ -36,9 +36,9 @@ def main():
             df[2] = None  # 如果原文件只有两列，新增空第三列
 
         # 覆盖保存文件[3,5](@ref)
-        df.to_csv(csv_path, index=False, header=False, encoding='utf-8-sig')
+        df.to_csv(excel_path, index=False, header=False, encoding='utf-8-sig')
 
-        print(f"成功处理并保存文件：{csv_path}")
+        print(f"成功处理并保存文件：{excel_path}")
 
     except Exception as e:
         print(f"处理失败：{str(e)}")
