@@ -15,10 +15,12 @@ import random
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
 def random_sleep(min_seconds=0.3, max_seconds=0.8):
     """随机延时函数"""
     sleep_time = random.uniform(min_seconds, max_seconds)
     time.sleep(sleep_time)
+
 
 def process_price_code(code):
     """处理价格接口的股票代码格式"""
@@ -100,30 +102,30 @@ def calculate_ta_indicators(df):
         # 确保pe_ttm列没有无效值
         df['pe_ttm'] = df['pe_ttm'].replace([np.inf, -np.inf], np.nan)
         df['pe_ttm'] = df['pe_ttm'].ffill().bfill()
-        
-        # 计算PE通道
-        min_pe = df['pe_ttm'].min()
-        max_pe = df['pe_ttm'].max()
-        step = (max_pe - min_pe) / 4
 
-        pe_levels = [
-            (min_pe, 'L2'),
-            (min_pe + step, 'L1'),
-            (min_pe + 2 * step, 'M'),
-            (min_pe + 3 * step, 'H1'),
-            (max_pe, 'H2')
-        ]
+        # 新PE通道计算方法
+        min_pe = df['pe_ttm'].min()  # L2
+        median_pe = df['pe_ttm'].median()  # M
+        step = (median_pe - min_pe) / 2 if median_pe > min_pe else 0
+        L2 = min_pe
+        M = median_pe
+        L1 = L2 + step
+        H1 = M + step
+        H2 = H1 + step
 
         # 计算投资收益率
         df['investment_income'] = df['close'] / df['pe_ttm'].replace(0, np.nan).fillna(1)
 
-        # 计算PE通道值
-        for value, col_name in pe_levels:
-            df[col_name] = value * df['investment_income']
+        # 赋值PE通道
+        df['L2'] = L2
+        df['L1'] = L1
+        df['M'] = M
+        df['H1'] = H1
+        df['H2'] = H2
 
     # 删除临时列
-    df = df.drop(columns=[f'MA{p}' for p in periods] + 
-                 ['short_term_low', 'short_term_high', 'long_term_low', 'long_term_high'])
+    df = df.drop(columns=[f'MA{p}' for p in periods] +
+                         ['short_term_low', 'short_term_high', 'long_term_low', 'long_term_high'])
 
     return df
 
@@ -167,14 +169,15 @@ def merge_and_save(price_df, indicator_df, save_path, symbol):
 
         # ========== 存储阶段 ==========
         # 基础列
-        base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 'outstanding_share', 'turnover']
-        
+        base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 'outstanding_share',
+                     'turnover']
+
         # 技术指标列
         ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 'short_term_fund', 'long_term_fund']
-        
+
         # PE通道列
         pe_cols = ['L2', 'L1', 'M', 'H1', 'H2', 'investment_income']
-        
+
         # 估值指标列
         value_cols = ['market_cap', 'float_market_cap', 'pe_ttm', 'pe_static', 'pb', 'peg', 'pcf', 'ps']
 
@@ -185,25 +188,25 @@ def merge_and_save(price_df, indicator_df, save_path, symbol):
         # 验证PE通道列是否存在
         missing_pe_cols = [col for col in pe_cols if col not in output_columns]
         if missing_pe_cols:
-            # 重新计算PE通道
+            # 重新计算PE通道，采用与calculate_ta_indicators一致的新方法
             merged_df['pe_ttm'] = merged_df['pe_ttm'].replace([np.inf, -np.inf, 0], np.nan).ffill().bfill()
-            min_pe = merged_df['pe_ttm'].min()
-            max_pe = merged_df['pe_ttm'].max()
-            step = (max_pe - min_pe) / 4
-
-            pe_levels = [
-                (min_pe, 'L2'),
-                (min_pe + step, 'L1'),
-                (min_pe + 2 * step, 'M'),
-                (min_pe + 3 * step, 'H1'),
-                (max_pe, 'H2')
-            ]
-
-            merged_df['investment_income'] = merged_df['close'] / merged_df['pe_ttm'].replace(0, np.nan).fillna(1)
-
-            for value, col_name in pe_levels:
-                merged_df[col_name] = value * merged_df['investment_income']
-
+            # 若investment_income不存在，先补充计算
+            if 'investment_income' not in merged_df.columns:
+                merged_df['investment_income'] = merged_df['close'] / merged_df['pe_ttm'].replace(0, np.nan).fillna(1)
+            min_pe = merged_df['pe_ttm'].min()  # L2
+            median_pe = merged_df['pe_ttm'].median()  # M
+            step = (median_pe - min_pe) / 2 if median_pe > min_pe else 0
+            L2 = min_pe
+            M = median_pe
+            L1 = L2 + step
+            H1 = M + step
+            H2 = H1 + step
+            # 赋值为常数乘以对应行的investment_income
+            merged_df['L2'] = L2 * merged_df['investment_income']
+            merged_df['L1'] = L1 * merged_df['investment_income']
+            merged_df['M'] = M * merged_df['investment_income']
+            merged_df['H1'] = H1 * merged_df['investment_income']
+            merged_df['H2'] = H2 * merged_df['investment_income']
             # 更新输出列
             output_columns = [col for col in all_columns if col in merged_df.columns]
 
@@ -219,7 +222,7 @@ def process_single_stock(raw_code, price_code, start_date, end_date, save_dir):
     """处理单个股票的数据获取和保存"""
     max_retries = 3
     retry_delay = 5  # 重试延迟秒数
-    
+
     for attempt in range(max_retries):
         try:
             # 股票代码转换
@@ -234,34 +237,34 @@ def process_single_stock(raw_code, price_code, start_date, end_date, save_dir):
                 try:
                     # 读取历史数据
                     history_df = pd.read_csv(save_path, encoding='utf_8_sig')
-                    
+
                     # 统一列名处理
                     history_df = history_df.rename(columns={
                         '\ufeffdate': 'date',
                         'trade_date': 'date',
                         '日期': 'date'
                     })
-                    
+
                     # 确保日期列存在并转换为datetime
                     if 'date' not in history_df.columns:
                         raise ValueError(f"日期列缺失，实际列名: {history_df.columns.tolist()}")
-                    
+
                     history_df['date'] = pd.to_datetime(history_df['date'])
-                    
+
                     # 获取最新日期
                     latest_date = history_df['date'].max()
                     latest_date_str = latest_date.strftime("%Y%m%d")
-                    
+
                     # 判断是否已是最新数据
                     if latest_date_str == end_date:
                         return f"⏩ 已是最新数据: {raw_code}"
-                    
+
                     # 删除早于start_date的数据
                     history_df = history_df[history_df['date'] >= pd.to_datetime(start_date)]
-                    
+
                     # 计算增量起始日期
                     new_start = (latest_date + pd.Timedelta(days=1)).strftime("%Y%m%d")
-                    
+
                     # 获取增量价格数据
                     temp_price_df = None
                     for _ in range(3):  # 最多重试3次
@@ -278,13 +281,13 @@ def process_single_stock(raw_code, price_code, start_date, end_date, save_dir):
                         except Exception as e:
                             print(f"获取价格数据失败 {raw_code}: {str(e)[:100]}")
                             random_sleep(2, 3)  # 失败后增加延时
-                    
+
                     if temp_price_df is None or temp_price_df.empty:
                         return f"⚠️ 无增量数据: {raw_code}"
-                        
+
                     # 统一价格数据列名
                     temp_price_df = temp_price_df.rename(columns={'date': 'trade_date'})
-                    
+
                     # 获取增量指标数据
                     temp_indicator_df = None
                     for _ in range(3):  # 最多重试3次
@@ -309,27 +312,27 @@ def process_single_stock(raw_code, price_code, start_date, end_date, save_dir):
                         except Exception as e:
                             print(f"获取指标数据失败 {raw_code}: {str(e)[:100]}")
                             random_sleep(3, 5)  # 失败后增加更长的延时
-                    
+
                     if temp_indicator_df is None or temp_indicator_df.empty:
                         return f"⚠️ 无增量指标: {raw_code}"
-                    
+
                     # 合并历史数据和增量数据
                     combined_price = pd.concat([
                         history_df,
                         temp_price_df
                     ], ignore_index=True)
-                    
+
                     # 日期去重和排序
                     combined_price['date'] = pd.to_datetime(combined_price['date'])
                     combined_price = combined_price.drop_duplicates(subset=['date'], keep='last').sort_values('date')
-                    
+
                 except Exception as e:
                     if attempt < max_retries - 1:
                         print(f"重试 {raw_code} - 原因: {str(e)[:100]}")
                         time.sleep(retry_delay)
                         continue
                     return f"❌ 处理历史数据失败: {str(e)[:100]}..."
-                    
+
             else:
                 # ================== 全量数据获取 ==================
                 try:
@@ -349,13 +352,13 @@ def process_single_stock(raw_code, price_code, start_date, end_date, save_dir):
                         except Exception as e:
                             print(f"获取价格数据失败 {raw_code}: {str(e)[:100]}")
                             random_sleep(0.3, 0.8)  # 失败后增加延时
-                    
+
                     if full_price_df is None or full_price_df.empty:
                         return f"⚠️ 无价格数据: {raw_code}"
-                        
+
                     # 统一价格数据列名
                     full_price_df = full_price_df.rename(columns={'date': 'trade_date'})
-                    
+
                     # 获取完整指标数据
                     full_indicator_df = None
                     for _ in range(3):  # 最多重试3次
@@ -380,12 +383,12 @@ def process_single_stock(raw_code, price_code, start_date, end_date, save_dir):
                         except Exception as e:
                             print(f"获取指标数据失败 {raw_code}: {str(e)[:100]}")
                             random_sleep(3, 5)  # 失败后增加更长的延时
-                    
+
                     if full_indicator_df is None or full_indicator_df.empty:
                         return f"⚠️ 无指标数据: {raw_code}"
-                        
+
                     combined_price = full_price_df
-                    
+
                 except Exception as e:
                     if attempt < max_retries - 1:
                         print(f"重试 {raw_code} - 原因: {str(e)[:100]}")
@@ -452,13 +455,13 @@ def main():
                 end_date=end_date,
                 save_dir=save_dir
             )
-            
+
             # 提交所有任务
             future_to_stock = {
                 executor.submit(process_func, raw_code, price_code): (raw_code, price_code)
                 for raw_code, price_code in zip(indicator_codes, price_codes)
             }
-            
+
             # 处理完成的任务
             for future in concurrent.futures.as_completed(future_to_stock):
                 raw_code, price_code = future_to_stock[future]

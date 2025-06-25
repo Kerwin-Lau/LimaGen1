@@ -29,7 +29,7 @@ def safe_get_hk_data(symbol, start_date, end_date, max_retries=3):
     for _ in range(max_retries):
         try:
             # 添加100-200ms的随机延迟
-            time.sleep(random.uniform(0.5, 0.8))
+            time.sleep(random.uniform(1, 3))
             
             df = ak.stock_hk_hist(
                 symbol=symbol,
