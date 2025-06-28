@@ -96,7 +96,7 @@ def generate_buy_signals(data):
     返回:
         dict: 包含各种买入信号标志的字典
     """
-    if data is None or len(data) < 20:  # 确保至少有20天数据用于计算BBI趋势
+    if data is None or len(data) < 22:  # 确保至少有22天数据用于突破确认
         return {
             'j_negative': 0,
             'j_value': 0.0,
@@ -105,7 +105,8 @@ def generate_buy_signals(data):
             'p2_signal': 0,
             'bbi_trend_5d': 0.0,
             'bbi_trend_20d': 0.0,
-            'bbi_above': 0
+            'bbi_above': 0,
+            'breakthrough_confirm': 0
         }
 
     # 获取最新和前一天的J值
@@ -139,6 +140,24 @@ def generate_buy_signals(data):
     p2_signal = 1 if (latest_short_fund > 95 and latest_long_fund > 95 and 
                      prev_short_fund < 20 and prev_long_fund > 80) else 0
 
+    # 新增：突破确认信号
+    try:
+        prev_close = data['close'].iloc[-2]
+        prev_open = data['open'].iloc[-2]
+        latest_close = data['close'].iloc[-1]
+        latest_open = data['open'].iloc[-1]
+        prev_vol = data['volume'].iloc[-2]
+        latest_vol = data['volume'].iloc[-1]
+        prev_21_1_close = data['close'].iloc[-22:-1]
+        cond1 = (prev_close == prev_21_1_close.max()) and ((prev_close - prev_open) / prev_open >= 0.05)
+        if latest_close > latest_open:
+            cond2 = True
+        else:
+            cond2 = not (0.5 * prev_vol <= latest_vol <= 0.9 * prev_vol)
+        breakthrough_confirm = 1 if (cond1 and cond2) else 0
+    except Exception as e:
+        breakthrough_confirm = 0
+
     return {
         'j_negative': j_negative,
         'j_value': latest_j,
@@ -147,7 +166,8 @@ def generate_buy_signals(data):
         'p2_signal': p2_signal,
         'bbi_trend_5d': bbi_trend_5d,
         'bbi_trend_20d': bbi_trend_20d,
-        'bbi_above': bbi_above
+        'bbi_above': bbi_above,
+        'breakthrough_confirm': breakthrough_confirm
     }
 
 
@@ -174,7 +194,7 @@ def main():
         signals = generate_buy_signals(data)
         
         # 检查是否有任何买入信号
-        if any([signals['j_negative'], signals['p1_signal'], signals['p2_signal']]):
+        if any([signals['j_negative'], signals['p1_signal'], signals['p2_signal'], signals['breakthrough_confirm']]):
             results.append({
                 '股票代码': symbol,
                 '股票名称': code_to_name.get(symbol, "未知"),
@@ -186,7 +206,8 @@ def main():
                 '补票-P2': signals['p2_signal'],
                 'BBI上涨趋势-5日': round(signals['bbi_trend_5d'] * 100, 2),  # 转换为百分比
                 'BBI上涨趋势-20日': round(signals['bbi_trend_20d'] * 100, 2),  # 转换为百分比
-                'BBI线上': signals['bbi_above']
+                'BBI线上': signals['bbi_above'],
+                '突破确认': signals['breakthrough_confirm']
             })
     
     # 创建结果DataFrame
