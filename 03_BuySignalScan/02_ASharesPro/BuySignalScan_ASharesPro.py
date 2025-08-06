@@ -119,7 +119,8 @@ def generate_buy_signals(data):
             'bbi_trend_20d': 0.0,
             'break_L1': 0,
             'touch_L2': 0,
-            'breakthrough_confirm': 0
+            'breakthrough_confirm': 0,
+            'short_term_down_no_break': 0
         }
     # 获取最新和前一天的J值
     latest_j = data['J'].iloc[-1]
@@ -155,6 +156,16 @@ def generate_buy_signals(data):
         else:
             cond2 = not (0.5 * prev_vol <= latest_vol <= 0.9 * prev_vol)
         breakthrough_confirm = 1 if (cond1 and cond2) else 0
+        # 短期下跌未破位信号
+        short_term_down_no_break = 0
+        if len(data) >= 4:
+            day4 = data.iloc[-4]  # 从最近一个交易日往前数的第4天
+            cond_1_1 = (day4['close'] > day4['open']) and ((day4['close'] - day4['open']) / day4['open'] > 0.05)
+            last3 = data.iloc[-3:]
+            cond_1_2 = all(last3['close'] < last3['open'])
+            cond_1_3 = data['close'].iloc[-1] > day4['open']
+            if cond_1_1 and cond_1_2 and cond_1_3:
+                short_term_down_no_break = 1
     except Exception as e:
         return {
             'j_negative': j_negative,
@@ -164,9 +175,10 @@ def generate_buy_signals(data):
             'p2_signal': p2_signal,
             'bbi_trend_5d': bbi_trend_5d,
             'bbi_trend_20d': bbi_trend_20d,
-            'break_L1': 0,
-            'touch_L2': 0,
-            'breakthrough_confirm': 0
+            'break_L1': break_L1,
+            'touch_L2': touch_L2,
+            'breakthrough_confirm': breakthrough_confirm,
+            'short_term_down_no_break': short_term_down_no_break
         }
     break_L1 = 1 if (prev_close > prev_L1 and latest_close < latest_L1) else 0
     touch_L2 = 1 if (prev_close > prev_L2 * 1.05 and latest_close < latest_L2 * 1.05) else 0
@@ -180,7 +192,8 @@ def generate_buy_signals(data):
         'bbi_trend_20d': bbi_trend_20d,
         'break_L1': break_L1,
         'touch_L2': touch_L2,
-        'breakthrough_confirm': breakthrough_confirm
+        'breakthrough_confirm': breakthrough_confirm,
+        'short_term_down_no_break': short_term_down_no_break
     }
 
 def load_low_volatility_stocks():
@@ -318,6 +331,7 @@ def main():
                 '股价位于R4区间': in_R4,
                 '股价创新高': is_new_high,
                 '突破确认': signals['breakthrough_confirm'],
+                '短期下跌未破位': signals['short_term_down_no_break'],
                 '优选联盟成员': is_union_member,
                 '低波红利': 1 if symbol in low_volatility_stocks else 0
             })

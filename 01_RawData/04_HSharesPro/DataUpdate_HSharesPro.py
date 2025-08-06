@@ -6,7 +6,7 @@ import talib
 import time
 import traceback
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from tqdm import tqdm
 import concurrent.futures
@@ -23,14 +23,13 @@ def validate_hk_code(code):
     return len(code) == 5 and code.isdigit()
 
 
-# 改进2：安全获取数据函数（含重试机制）
-def safe_get_hk_data(symbol, start_date, end_date, max_retries=3):
-    """带重试机制的数据获取"""
-    for _ in range(max_retries):
+# 改进2：安全获取数据函数（含重试机制和接口切换）
+def safe_get_hk_data(symbol, start_date, end_date, spot_data=None, max_retries=3):
+    """带重试机制和接口切换的数据获取"""
+    
+    def try_stock_hk_hist():
         try:
-            # 添加100-200ms的随机延迟
             time.sleep(random.uniform(1, 3))
-            
             df = ak.stock_hk_hist(
                 symbol=symbol,
                 period="daily",
@@ -38,27 +37,87 @@ def safe_get_hk_data(symbol, start_date, end_date, max_retries=3):
                 end_date=end_date,
                 adjust="qfq"
             )
-            # 改进3：动态字段映射校验
-            required_cols = {'日期', '开盘', '最高', '最低', '收盘', '成交量','成交额','振幅','涨跌幅','涨跌额','换手率'}
-            if df.empty or not required_cols.issubset(df.columns):
+            if df.empty:
                 return pd.DataFrame()
-
+            required_cols = {'日期', '开盘', '最高', '最低', '收盘', '成交量'}
+            if not required_cols.issubset(df.columns):
+                return pd.DataFrame()
+            df = df[['日期', '开盘', '最高', '最低', '收盘', '成交量']].copy()
             return df.rename(columns={
                 '日期': 'date',
                 '开盘': 'open',
                 '最高': 'high',
                 '最低': 'low',
                 '收盘': 'close',
-                '成交量': 'volume',
-                '成交额': 'amount',
-                '振幅': 'amplitude',
-                '涨跌幅': 'change_pct',
-                '涨跌额': 'change_amount',
-                '换手率': 'turnover_rate'
+                '成交量': 'volume'
             })
         except Exception as e:
-            print(f"⚠️ 获取数据失败: {symbol}, 重试 {_ + 1}/{max_retries}")
-            time.sleep(2)
+            print(f"⚠️ stock_hk_hist接口失败: {symbol}, 错误: {str(e)[:50]}")
+            return pd.DataFrame()
+
+    def try_stock_hk_daily():
+        try:
+            time.sleep(random.uniform(1, 3))
+            df = ak.stock_hk_daily(
+                symbol=symbol,
+                adjust="qfq"
+            )
+            if df.empty:
+                return pd.DataFrame()
+            required_cols = {'date', 'open', 'high', 'low', 'close', 'volume'}
+            if not required_cols.issubset(df.columns):
+                return pd.DataFrame()
+            df = df[['date', 'open', 'high', 'low', 'close', 'volume']].copy()
+            # 日期筛选
+            df['date'] = pd.to_datetime(df['date'])
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            df = df[(df['date'] >= start) & (df['date'] <= end)]
+            # 检查是否需要补充今日数据
+            if not df.empty and spot_data is not None:
+                max_daily_date = df['date'].max()
+                if (end - max_daily_date).days == 1:
+                    # 从全局spot_data中查找对应股票数据
+                    try:
+                        symbol_str = str(symbol).zfill(5)
+                        spot_row = spot_data[spot_data['股票代码'] == symbol_str]
+                        if not spot_row.empty:
+                            spot_row = spot_row.iloc[0]
+                            spot_dict = {
+                                'date': pd.to_datetime(spot_row['日期时间']).strftime('%Y-%m-%d'),
+                                'open': spot_row['今开'],
+                                'high': spot_row['最高'],
+                                'low': spot_row['最低'],
+                                'close': spot_row['最新价'],
+                                'volume': spot_row['成交量']
+                            }
+                            # 只在spot日期等于end_date时才补充
+                            if spot_dict['date'] == end.strftime('%Y-%m-%d'):
+                                spot_df = pd.DataFrame([spot_dict])
+                                df = pd.concat([df, spot_df], ignore_index=True)
+                    except Exception as e:
+                        print(f"⚠️ 从spot_data查找数据失败: {symbol}, 错误: {str(e)[:50]}")
+            # 恢复date为字符串格式，保持和hist一致
+            df['date'] = df['date'].dt.strftime('%Y-%m-%d')
+            return df.reset_index(drop=True)
+        except Exception as e:
+            print(f"⚠️ stock_hk_daily接口失败: {symbol}, 错误: {str(e)[:50]}")
+            return pd.DataFrame()
+
+    # 接口切换逻辑
+    df = try_stock_hk_hist()
+    if not df.empty:
+        return df
+    df = try_stock_hk_daily()
+    if not df.empty:
+        return df
+    df = try_stock_hk_hist()
+    if not df.empty:
+        return df
+    df = try_stock_hk_daily()
+    if not df.empty:
+        return df
+    print(f"❌ 所有接口都无法获取数据: {symbol}")
     return pd.DataFrame()
 
 
@@ -69,10 +128,31 @@ def pad_stock_code(code):
 
 
 def get_date_range(years=5):
-    """生成动态时间范围"""
-    end_date = datetime.now().strftime("%Y%m%d")
-    start_date = (datetime.now() - relativedelta(years=years)).strftime("%Y%m%d")
+    """生成动态时间范围，包含周末日期判断"""
+    today = datetime.now()
+    
+    # 周末日期判断逻辑
+    if today.weekday() == 5:  # 周六
+        end_date = (today - timedelta(days=1)).strftime("%Y%m%d")
+    elif today.weekday() == 6:  # 周日
+        end_date = (today - timedelta(days=2)).strftime("%Y%m%d")
+    else:
+        end_date = today.strftime("%Y%m%d")
+    
+    start_date = (today - relativedelta(years=years)).strftime("%Y%m%d")
     return start_date, end_date
+
+
+def get_spot_data():
+    """获取全市场实时行情数据"""
+    try:
+        print("📊 正在获取全市场实时行情数据...")
+        spot_data = ak.stock_hk_spot()
+        print(f"✅ 成功获取 {len(spot_data)} 只股票的实时行情数据")
+        return spot_data
+    except Exception as e:
+        print(f"❌ 获取实时行情数据失败: {str(e)[:100]}")
+        return None
 
 
 def calculate_ta_indicators(df):
@@ -125,8 +205,7 @@ def process_and_save(price_df, save_path, symbol):
             raise ValueError("空或无效数据")
 
         # 字段类型转换
-        numeric_cols = ['open','high','low','close','volume','amount',
-                       'amplitude','change_pct','change_amount','turnover_rate']
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
         price_df[numeric_cols] = price_df[numeric_cols].apply(pd.to_numeric, errors='coerce')
 
         # 计算技术指标
@@ -150,8 +229,7 @@ def process_and_save(price_df, save_path, symbol):
             )
 
         # 定义输出列
-        base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 
-                    'amplitude', 'change_pct', 'change_amount', 'turnover_rate']
+        base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume']
         ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 
                   'short_term_fund', 'long_term_fund']
         output_columns = [col for col in (base_cols + ta_cols) if col in price_df.columns]
@@ -163,7 +241,7 @@ def process_and_save(price_df, save_path, symbol):
         raise
 
 
-def process_single_stock(raw_code, start_date, end_date, save_dir):
+def process_single_stock(raw_code, start_date, end_date, save_dir, spot_data=None):
     """处理单个股票的数据获取和保存"""
     max_retries = 3
     retry_delay = 5  # 重试延迟秒数
@@ -186,7 +264,7 @@ def process_single_stock(raw_code, start_date, end_date, save_dir):
                     
                     # 计算增量起始日期
                     new_start = (latest_date + pd.Timedelta(days=1)).strftime("%Y%m%d")
-                    temp_price_df = safe_get_hk_data(raw_code, new_start, end_date)
+                    temp_price_df = safe_get_hk_data(raw_code, new_start, end_date, spot_data)
                     
                     if not temp_price_df.empty:
                         combined_price = pd.concat([history_df, temp_price_df])
@@ -200,7 +278,7 @@ def process_single_stock(raw_code, start_date, end_date, save_dir):
                     return f"❌ 处理历史数据失败: {str(e)[:100]}..."
             else:
                 # 全量数据获取
-                combined_price = safe_get_hk_data(raw_code, start_date, end_date)
+                combined_price = safe_get_hk_data(raw_code, start_date, end_date, spot_data)
                 if combined_price.empty:
                     return f"⚠️ 无数据: {raw_code}"
 
@@ -236,6 +314,10 @@ def main():
 
     # 获取日期范围
     start_date, end_date = get_date_range()
+    print(f"📅 数据获取时间范围: {start_date} 至 {end_date}")
+
+    # 获取全市场实时行情数据（只调用一次）
+    spot_data = get_spot_data()
 
     # 创建进度条
     with tqdm(total=total, desc="🔄 数据处理进度") as pbar:
@@ -246,7 +328,8 @@ def main():
                 process_single_stock,
                 start_date=start_date,
                 end_date=end_date,
-                save_dir=save_dir
+                save_dir=save_dir,
+                spot_data=spot_data
             )
             
             # 提交所有任务

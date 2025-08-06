@@ -41,9 +41,6 @@ def load_stock_codes():
         print(f"正在读取文件: {file_path}")
         
         df = pd.read_excel(file_path)
-        print("Excel文件列名:", df.columns.tolist())
-        print("\n前几行数据:")
-        print(df.head())
         
         # 处理股票代码格式
         df['代码'] = df['代码'].astype(str).str.zfill(5)
@@ -131,7 +128,7 @@ def generate_buy_signals(data):
     bbi_above = 1 if (latest_close > latest_bbi and latest_open > latest_bbi) else 0
 
     # 条件1: J值为负
-    j_negative = 1 if latest_j < 0 else 0
+    j_negative = 1 if latest_j < 10 else 0
     
     # 条件2: 补票-P1
     p1_signal = 1 if (latest_short_fund < 20 and latest_long_fund > 80) else 0
@@ -195,6 +192,9 @@ def main():
         
         # 检查是否有任何买入信号
         if any([signals['j_negative'], signals['p1_signal'], signals['p2_signal'], signals['breakthrough_confirm']]):
+            # 获取最新日期的长线资金数据
+            latest_long_term_fund = data['long_term_fund'].iloc[-1] if data is not None else 0
+            
             results.append({
                 '股票代码': symbol,
                 '股票名称': code_to_name.get(symbol, "未知"),
@@ -204,6 +204,7 @@ def main():
                 'J值反转-日线': signals['j_reversal'],
                 '补票-P1': signals['p1_signal'],
                 '补票-P2': signals['p2_signal'],
+                '长线资金': round(latest_long_term_fund, 2),
                 'BBI上涨趋势-5日': round(signals['bbi_trend_5d'] * 100, 2),  # 转换为百分比
                 'BBI上涨趋势-20日': round(signals['bbi_trend_20d'] * 100, 2),  # 转换为百分比
                 'BBI线上': signals['bbi_above'],
