@@ -134,7 +134,7 @@ def generate_buy_signals(data):
     bbi_dif = data['BBI_DIF'].iloc[-20:]
     bbi_trend_5d = (bbi_dif.iloc[-5:] > 0).mean()
     bbi_trend_20d = (bbi_dif > 0).mean()
-    j_negative = 1 if latest_j < 0 else 0
+    j_negative = 1 if latest_j < 10 else 0
     p1_signal = 1 if (latest_short_fund < 20 and latest_long_fund > 80) else 0
     p2_signal = 1 if (latest_short_fund > 95 and latest_long_fund > 95 and prev_short_fund < 20 and prev_long_fund > 80) else 0
     try:

@@ -76,28 +76,36 @@ def safe_get_hk_data(symbol, start_date, end_date, spot_data=None, max_retries=3
             # 检查是否需要补充今日数据
             if not df.empty and spot_data is not None:
                 max_daily_date = df['date'].max()
-                if (end - max_daily_date).days == 1:
+                print(f"[调试] max_daily_date: {max_daily_date}, end: {end}, (end-max_daily_date).days: {(end-max_daily_date).days}")
+                if (end - max_daily_date).days >= 1:
                     # 从全局spot_data中查找对应股票数据
                     try:
                         symbol_str = str(symbol).zfill(5)
-                        spot_row = spot_data[spot_data['股票代码'] == symbol_str]
+                        spot_row = spot_data[spot_data['代码'] == symbol_str]
                         if not spot_row.empty:
                             spot_row = spot_row.iloc[0]
                             spot_dict = {
-                                'date': pd.to_datetime(spot_row['日期时间']).strftime('%Y-%m-%d'),
+                                'date': pd.to_datetime(spot_row['日期时间']).date(),  # 直接用date对象
                                 'open': spot_row['今开'],
                                 'high': spot_row['最高'],
                                 'low': spot_row['最低'],
                                 'close': spot_row['最新价'],
                                 'volume': spot_row['成交量']
                             }
+                            print(f"[调试] spot_dict['date']: {spot_dict['date']}, end_date: {end.strftime('%Y-%m-%d')}")
                             # 只在spot日期等于end_date时才补充
-                            if spot_dict['date'] == end.strftime('%Y-%m-%d'):
+                            if str(spot_dict['date']) == end.strftime('%Y-%m-%d'):
                                 spot_df = pd.DataFrame([spot_dict])
+                                print(f"[调试] 拼接spot数据: {spot_df}")
                                 df = pd.concat([df, spot_df], ignore_index=True)
+                            else:
+                                print(f"[调试] spot_dict['date']与end_date不一致，不补充。")
+                        else:
+                            print(f"[调试] spot_data中未找到symbol: {symbol_str}")
                     except Exception as e:
                         print(f"⚠️ 从spot_data查找数据失败: {symbol}, 错误: {str(e)[:50]}")
             # 恢复date为字符串格式，保持和hist一致
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
             df['date'] = df['date'].dt.strftime('%Y-%m-%d')
             return df.reset_index(drop=True)
         except Exception as e:
