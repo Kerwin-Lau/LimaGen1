@@ -27,13 +27,20 @@ def process_price_code(code):
     code_str = str(code).strip()
     num_part = ''.join(filter(str.isdigit, code_str))
     if not num_part:
+        print(f"❌ 无效代码格式: {code}")
         return None
+    
     first_digit = num_part[0]
-    if first_digit in ('6', '9'):
+    
+    # 按照新规则处理股票代码前缀
+    if first_digit == '6':
         return f'sh{num_part}'
-    elif first_digit in ('0', '3', '2'):
+    elif first_digit in ('0', '3'):
         return f'sz{num_part}'
+    elif first_digit in ('8', '9'):
+        return f'bj{num_part}'
     else:
+        print(f"❌ 不支持的股票代码开头: {code} (开头数字: {first_digit})")
         return None
 
 
@@ -96,6 +103,17 @@ def calculate_ta_indicators(df):
     df['long_term_low'] = df['low'].rolling(window=21).min()
     df['long_term_high'] = df['close'].rolling(window=21).max()
     df['long_term_fund'] = 100 * (df['close'] - df['long_term_low']) / (df['long_term_high'] - df['long_term_low'])
+
+    # 短期多空线 Short_LS = (SMA(C,14)+SMA(C,28)+SMA(C,57)+SMA(C,114))/4，保留两位小数
+    sma14 = talib.SMA(df['close'], timeperiod=14)
+    sma28 = talib.SMA(df['close'], timeperiod=28)
+    sma57 = talib.SMA(df['close'], timeperiod=57)
+    sma114 = talib.SMA(df['close'], timeperiod=114)
+    df['Short_LS'] = np.round((sma14 + sma28 + sma57 + sma114) / 4.0, 2)
+
+    # 短期趋势 Short_Trend = EMA(EMA(C,10),10)，保留两位小数
+    ema10_first = talib.EMA(df['close'], timeperiod=10)
+    df['Short_Trend'] = np.round(talib.EMA(ema10_first, timeperiod=10), 2)
 
     # PE通道计算
     if 'pe_ttm' in df.columns:
@@ -172,8 +190,8 @@ def merge_and_save(price_df, indicator_df, save_path, symbol):
         base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 'outstanding_share',
                      'turnover']
 
-        # 技术指标列
-        ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 'short_term_fund', 'long_term_fund']
+        # 技术指标列（按要求在 long_term_fund 后加入 Short_LS 和 Short_Trend）
+        ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 'short_term_fund', 'long_term_fund', 'Short_LS', 'Short_Trend']
 
         # PE通道列
         pe_cols = ['L2', 'L1', 'M', 'H1', 'H2', 'investment_income']

@@ -290,6 +290,53 @@ def main():
                 long_term_fund = data['long_term_fund'].iloc[-1]
             except Exception as e:
                 long_term_fund = 0
+            # 计算短线金叉信号
+            try:
+                latest_short_trend = data['Short_Trend'].iloc[-1]
+                latest_short_ls = data['Short_LS'].iloc[-1]
+                short_gcross_normal = 1 if latest_short_trend > latest_short_ls else 0
+                within_trend_range = False
+                within_ls_range = False
+                if latest_short_trend != 0:
+                    within_trend_range = abs(latest_close - latest_short_trend) / abs(latest_short_trend) <= 0.02
+                if latest_short_ls != 0:
+                    within_ls_range = abs(latest_close - latest_short_ls) / abs(latest_short_ls) <= 0.02
+                short_gcross_plus = 1 if (short_gcross_normal == 1 and (within_trend_range or within_ls_range)) else 0
+                
+                # 计算short_gcross_pro参数
+                try:
+                    latest_high = data['high'].iloc[-1]
+                    latest_low = data['low'].iloc[-1]
+                    latest_open = data['open'].iloc[-1]
+                    latest_close = data['close'].iloc[-1]
+                    latest_volume = data['volume'].iloc[-1]
+                    
+                    # 条件1：当日股价振幅在7%以内
+                    amplitude_ratio = (latest_high - latest_low) / latest_open
+                    condition1 = amplitude_ratio <= 0.07
+                    
+                    # 条件2：当日股价涨跌幅在-1.8%至2%以内
+                    change_ratio = (latest_close - latest_open) / latest_open
+                    condition2 = -0.018 <= change_ratio <= 0.02
+                    
+                    # 条件3：对应股票的short_gcross_plus=1
+                    condition3 = short_gcross_plus == 1
+                    
+                    # 条件4：最新交易日volume是过去10个交易日的最小值
+                    if len(data) >= 10:
+                        past_10_volumes = data['volume'].iloc[-10:]
+                        condition4 = latest_volume == past_10_volumes.min()
+                    else:
+                        condition4 = False
+                    
+                    # 四个条件同时满足，short_gcross_pro=1
+                    short_gcross_pro = 1 if (condition1 and condition2 and condition3 and condition4) else 0
+                except Exception:
+                    short_gcross_pro = 0
+            except Exception:
+                short_gcross_normal = 0
+                short_gcross_plus = 0
+                short_gcross_pro = 0
             # 区间判断
             try:
                 latest_L1 = data['L1'].iloc[-1]
@@ -320,6 +367,9 @@ def main():
                 '补票-P1': signals['p1_signal'],
                 '补票-P2': signals['p2_signal'],
                 '长线资金指标': long_term_fund,
+                'Short_GCross_Normal': short_gcross_normal,
+                'Short_GCross_Plus': short_gcross_plus,
+                'Short_GCross_Pro': short_gcross_pro,
                 'BBI线上': bbi_online,
                 'BBI上涨趋势-5日': round(signals['bbi_trend_5d'], 2),
                 'BBI上涨趋势-20日': round(signals['bbi_trend_20d'], 2),
@@ -341,23 +391,43 @@ def main():
         output_df = pd.DataFrame(results)
         # 计算综合得分
         output_df['综合得分'] = output_df.apply(lambda row: calculate_total_score(row, WEIGHTS), axis=1)
+        # 长线资金指标保留两位小数
+        if '长线资金指标' in output_df.columns:
+            output_df['长线资金指标'] = output_df['长线资金指标'].round(2)
         
         # 设置输出文件名
         filename = f"ASharesPro_ScanResult_{latest_date}.xlsx"
         output_path = os.path.join(CONFIG['result_folder'], filename)
         
-        # 保存为Excel文件
+        # 保存为Excel文件（分表：主板、创业科创、北交）
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            output_df.to_excel(writer, index=False, sheet_name='买入信号')
-            
-            # 设置列宽
-            worksheet = writer.sheets['买入信号']
-            for idx, col in enumerate(output_df.columns):
-                max_length = max(
-                    output_df[col].astype(str).apply(len).max(),
-                    len(col)
-                )
-                worksheet.column_dimensions[chr(65 + idx)].width = max_length + 2
+            # 分类掩码
+            main_mask = output_df['股票代码'].str.startswith(('00', '60'))
+            cxkc_mask = output_df['股票代码'].str.startswith(('30', '688'))
+            bj_mask = output_df['股票代码'].str.startswith(('82', '83', '87', '88', '920'))
+            # 各子表
+            df_main = output_df[main_mask].copy()
+            df_cxkc = output_df[cxkc_mask].copy()
+            df_bj = output_df[bj_mask].copy()
+            # 写入各sheet
+            df_main.to_excel(writer, index=False, sheet_name='主板')
+            df_cxkc.to_excel(writer, index=False, sheet_name='创业科创')
+            df_bj.to_excel(writer, index=False, sheet_name='北交')
+            # 设置列宽函数
+            def _set_col_width(ws, df_ref):
+                from openpyxl.utils import get_column_letter
+                for idx, col in enumerate(df_ref.columns):
+                    try:
+                        max_length = max(df_ref[col].astype(str).apply(len).max(), len(col))
+                    except Exception:
+                        max_length = len(col)
+                    # 使用openpyxl的get_column_letter函数来正确获取列字母
+                    col_letter = get_column_letter(idx + 1)
+                    ws.column_dimensions[col_letter].width = max_length + 2
+            # 应用列宽
+            _set_col_width(writer.sheets['主板'], df_main if not df_main.empty else output_df)
+            _set_col_width(writer.sheets['创业科创'], df_cxkc if not df_cxkc.empty else output_df)
+            _set_col_width(writer.sheets['北交'], df_bj if not df_bj.empty else output_df)
         
         print(f"\n\n结果已保存至：{output_path}")
         print(f"\n共发现 {len(results)} 只股票符合买入条件")
