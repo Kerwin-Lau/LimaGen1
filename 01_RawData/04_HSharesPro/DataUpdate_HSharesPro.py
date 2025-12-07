@@ -198,6 +198,16 @@ def calculate_ta_indicators(df):
     df['long_term_high'] = df['close'].rolling(window=21).max()
     df['long_term_fund'] = 100 * (df['close'] - df['long_term_low']) / (df['long_term_high'] - df['long_term_low'])
 
+    # 短期多空线 Short_LS 和 短期趋势 Short_Trend
+    sma14 = talib.SMA(df['close'], timeperiod=14)
+    sma28 = talib.SMA(df['close'], timeperiod=28)
+    sma57 = talib.SMA(df['close'], timeperiod=57)
+    sma114 = talib.SMA(df['close'], timeperiod=114)
+    df['Short_LS'] = np.round((sma14 + sma28 + sma57 + sma114) / 4.0, 2)
+
+    ema10_first = talib.EMA(df['close'], timeperiod=10)
+    df['Short_Trend'] = np.round(talib.EMA(ema10_first, timeperiod=10), 2)
+
     # 删除临时列
     df = df.drop(columns=[f'MA{p}' for p in periods] + 
                  ['short_term_low', 'short_term_high', 'long_term_low', 'long_term_high'])
@@ -239,7 +249,7 @@ def process_and_save(price_df, save_path, symbol):
         # 定义输出列
         base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume']
         ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 
-                  'short_term_fund', 'long_term_fund']
+                  'short_term_fund', 'long_term_fund', 'Short_LS', 'Short_Trend']
         output_columns = [col for col in (base_cols + ta_cols) if col in price_df.columns]
 
         price_df[output_columns].to_csv(save_path, index=False, encoding='utf_8_sig')
@@ -314,7 +324,10 @@ def main():
     try:
         # 读取Excel文件，跳过表头
         df = pd.read_excel(excel_path, dtype={'股票代码': str})
-        stock_codes = df.iloc[:, 0].apply(pad_stock_code).dropna().unique().tolist()
+        code_series = df.iloc[:, 0].apply(pad_stock_code)
+        name_series = df.iloc[:, 1] if df.shape[1] >= 2 else pd.Series(['未知名称'] * len(df))
+        code_to_name = {c: n for c, n in zip(code_series, name_series)}
+        stock_codes = code_series.dropna().unique().tolist()
         total = len(stock_codes)
     except Exception as e:
         print(f"读取Excel文件失败: {e}")
@@ -347,15 +360,25 @@ def main():
             }
             
             # 处理完成的任务
+            failed_list = []
             for future in concurrent.futures.as_completed(future_to_stock):
                 code = future_to_stock[future]
                 try:
                     result = future.result()
                     pbar.set_postfix_str(result)
+                    if isinstance(result, str) and (result.startswith('⚠️') or result.startswith('❌')):
+                        failed_list.append((code, code_to_name.get(code, '未知名称'), result))
                 except Exception as e:
                     pbar.set_postfix_str(f"❌ 失败: {code}")
+                    failed_list.append((code, code_to_name.get(code, '未知名称'), '❌ 异常失败'))
                 finally:
                     pbar.update(1)
+
+    # 程序结束前打印失败清单
+    if 'failed_list' in locals() and len(failed_list) > 0:
+        print("\n❗以下股票未成功获取或处理数据：")
+        for code, name, reason in failed_list:
+            print(f"- {code} {name}: {reason}")
 
 
 if __name__ == "__main__":

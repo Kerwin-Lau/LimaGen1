@@ -93,7 +93,8 @@ def generate_buy_signals(data):
     返回:
         dict: 包含各种买入信号标志的字典
     """
-    if data is None or len(data) < 22:  # 确保至少有22天数据用于突破确认
+    if data is None or len(data) < 22:  # 确保至少有22天数据
+
         return {
             'j_negative': 0,
             'j_value': 0.0,
@@ -194,6 +195,43 @@ def main():
         if any([signals['j_negative'], signals['p1_signal'], signals['p2_signal'], signals['breakthrough_confirm']]):
             # 获取最新日期的长线资金数据
             latest_long_term_fund = data['long_term_fund'].iloc[-1] if data is not None else 0
+            # 计算短线金叉信号（参考A股专业版实现）
+            try:
+                latest_short_trend = data['Short_Trend'].iloc[-1]
+                latest_short_ls = data['Short_LS'].iloc[-1]
+                latest_close_px = data['close'].iloc[-1]
+                short_gcross_normal = 1 if latest_short_trend > latest_short_ls else 0
+                within_trend_range = False
+                within_ls_range = False
+                if latest_short_trend != 0:
+                    within_trend_range = abs(latest_close_px - latest_short_trend) / abs(latest_short_trend) <= 0.02
+                if latest_short_ls != 0:
+                    within_ls_range = abs(latest_close_px - latest_short_ls) / abs(latest_short_ls) <= 0.02
+                short_gcross_plus = 1 if (short_gcross_normal == 1 and (within_trend_range or within_ls_range)) else 0
+                # 计算short_gcross_pro
+                try:
+                    latest_high = data['high'].iloc[-1]
+                    latest_low = data['low'].iloc[-1]
+                    latest_open_px = data['open'].iloc[-1]
+                    latest_close = data['close'].iloc[-1]
+                    latest_volume = data['volume'].iloc[-1]
+                    amplitude_ratio = (latest_high - latest_low) / latest_open_px
+                    condition1 = amplitude_ratio <= 0.07
+                    change_ratio = (latest_close - latest_open_px) / latest_open_px
+                    condition2 = -0.018 <= change_ratio <= 0.02
+                    condition3 = short_gcross_plus == 1
+                    if len(data) >= 10:
+                        past_10_volumes = data['volume'].iloc[-10:]
+                        condition4 = latest_volume == past_10_volumes.min()
+                    else:
+                        condition4 = False
+                    short_gcross_pro = 1 if (condition1 and condition2 and condition3 and condition4) else 0
+                except Exception:
+                    short_gcross_pro = 0
+            except Exception:
+                short_gcross_normal = 0
+                short_gcross_plus = 0
+                short_gcross_pro = 0
             
             results.append({
                 '股票代码': symbol,
@@ -205,6 +243,9 @@ def main():
                 '补票-P1': signals['p1_signal'],
                 '补票-P2': signals['p2_signal'],
                 '长线资金': round(latest_long_term_fund, 2),
+                'Short_GCross_Normal': short_gcross_normal,
+                'Short_GCross_Plus': short_gcross_plus,
+                'Short_GCross_Pro': short_gcross_pro,
                 'BBI上涨趋势-5日': round(signals['bbi_trend_5d'] * 100, 2),  # 转换为百分比
                 'BBI上涨趋势-20日': round(signals['bbi_trend_20d'] * 100, 2),  # 转换为百分比
                 'BBI线上': signals['bbi_above'],
