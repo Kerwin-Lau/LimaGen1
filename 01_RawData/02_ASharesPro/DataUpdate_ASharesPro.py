@@ -143,15 +143,89 @@ class StockDataUpdater:
         end_dt = datetime.strptime(end_date, "%Y%m%d")
         return df[(df['date'] >= start_dt) & (df['date'] <= end_dt)]
 
+    def calculate_kdj(self, df, n=9, m1=3, m2=3):
+        """
+        计算KDJ指标，与股票软件保持一致
+        使用标准公式：K = (2/3) * K_前一日 + (1/3) * RSV
+                     D = (2/3) * D_前一日 + (1/3) * K
+                     J = 3 * K - 2 * D
+        
+        Args:
+            df: 包含high, low, close列的DataFrame，必须按时间正序排列
+            n: RSV计算周期，默认9
+            m1: K值平滑周期，默认3（实际使用固定1/3平滑系数）
+            m2: D值平滑周期，默认3（实际使用固定1/3平滑系数）
+        """
+        # 确保数据按时间正序排列并重置索引
+        df_work = df.copy()
+        if 'date' in df_work.columns:
+            df_work = df_work.sort_values('date').reset_index(drop=True)
+        elif 'trade_date' in df_work.columns:
+            df_work = df_work.sort_values('trade_date').reset_index(drop=True)
+        
+        high = df_work['high'].values
+        low = df_work['low'].values
+        close = df_work['close'].values
+        length = len(df_work)
+        
+        # 计算RSV（未成熟随机值）
+        rsv = np.full(length, np.nan)
+        for i in range(n - 1, length):
+            period_high = high[i - n + 1:i + 1]
+            period_low = low[i - n + 1:i + 1]
+            highest = np.max(period_high)
+            lowest = np.min(period_low)
+            
+            if highest != lowest:
+                rsv[i] = 100 * (close[i] - lowest) / (highest - lowest)
+            else:
+                rsv[i] = 50  # 如果最高价等于最低价，RSV设为50
+        
+        # 计算K值和D值（使用EMA平滑，初始值为50）
+        k = np.full(length, np.nan)
+        d = np.full(length, np.nan)
+        
+        # 找到第一个有效的RSV值
+        first_valid_idx = None
+        for i in range(length):
+            if not np.isnan(rsv[i]):
+                first_valid_idx = i
+                break
+        
+        if first_valid_idx is not None:
+            # 初始化K和D值
+            # 有些软件使用第一个RSV值作为初始K值，有些使用50
+            # 这里使用第一个RSV值，更符合大多数股票软件的实现
+            k[first_valid_idx] = rsv[first_valid_idx]
+            d[first_valid_idx] = rsv[first_valid_idx]  # D的初始值也使用第一个RSV
+            
+            # 计算K值：K = (2/3) * K_前一日 + (1/3) * RSV
+            # 标准KDJ公式，平滑系数固定为1/3
+            alpha_k = 1.0 / 3.0
+            for i in range(first_valid_idx + 1, length):
+                if not np.isnan(rsv[i]):
+                    k[i] = (1 - alpha_k) * k[i - 1] + alpha_k * rsv[i]
+                else:
+                    k[i] = k[i - 1]
+            
+            # 计算D值：D = (2/3) * D_前一日 + (1/3) * K
+            # 标准KDJ公式，平滑系数固定为1/3
+            alpha_d = 1.0 / 3.0
+            for i in range(first_valid_idx + 1, length):
+                if not np.isnan(k[i]):
+                    d[i] = (1 - alpha_d) * d[i - 1] + alpha_d * k[i]
+                else:
+                    d[i] = d[i - 1]
+        
+        # 计算J值：J = 3 * K - 2 * D
+        j = 3 * k - 2 * d
+        
+        return k, d, j
+
     def calculate_ta_indicators(self, df):
         """计算技术指标（与原版保持一致）"""
-        # KDJ指标
-        df['K'], df['D'] = talib.STOCH(
-            df['high'].values, df['low'].values, df['close'].values,
-            fastk_period=9, slowk_period=3, slowk_matype=0,
-            slowd_period=3, slowd_matype=0
-        )
-        df['J'] = 3 * df['K'] - 2 * df['D']
+        # KDJ指标 - 使用自定义函数确保与股票软件一致
+        df['K'], df['D'], df['J'] = self.calculate_kdj(df, n=9, m1=3, m2=3)
 
         # BBI指标
         periods = [3, 6, 12, 24]
