@@ -4,7 +4,7 @@ from datetime import datetime
 
 # 配置参数
 CONFIG = {
-    "data_root": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesPro",
+    "data_root": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesDaliy",
     "stockpool_file": "ASharesPro.xlsx",
     "data_folder": "StocksData",
     "result_folder": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\03_BuySignalScan\02_ASharesPro",
@@ -120,7 +120,8 @@ def generate_buy_signals(data):
             'break_L1': 0,
             'touch_L2': 0,
             'breakthrough_confirm': 0,
-            'short_term_down_no_break': 0
+            'short_term_down_no_break': 0,
+            'red_brick': 0
         }
     # 获取最新和前一天的J值
     latest_j = data['J'].iloc[-1]
@@ -137,6 +138,26 @@ def generate_buy_signals(data):
     j_negative = 1 if latest_j < 15 else 0
     p1_signal = 1 if (latest_short_fund < 20 and latest_long_fund > 80) else 0
     p2_signal = 1 if (latest_short_fund > 95 and latest_long_fund > 95 and prev_short_fund < 20 and prev_long_fund > 80) else 0
+
+    # 计算 red_brick 买入信号
+    red_brick = 0
+    try:
+        prev_brick_high = data['Brick_High'].iloc[-2]
+        prev_brick_low = data['Brick_Low'].iloc[-2]
+        latest_brick_high = data['Brick_High'].iloc[-1]
+        latest_brick_low = data['Brick_Low'].iloc[-1]
+
+        cond_rb_1 = prev_brick_high < prev_brick_low
+        cond_rb_2 = latest_brick_high > latest_brick_low
+        prev_diff = abs(prev_brick_high - prev_brick_low)
+        latest_diff = abs(latest_brick_high - latest_brick_low)
+        cond_rb_3 = latest_diff > 0.7 * prev_diff
+
+        if cond_rb_1 and cond_rb_2 and cond_rb_3:
+            red_brick = 1
+    except Exception:
+        red_brick = 0
+
     try:
         prev_close = data['close'].iloc[-2]
         latest_close = data['close'].iloc[-1]
@@ -178,7 +199,8 @@ def generate_buy_signals(data):
             'break_L1': break_L1,
             'touch_L2': touch_L2,
             'breakthrough_confirm': breakthrough_confirm,
-            'short_term_down_no_break': short_term_down_no_break
+            'short_term_down_no_break': short_term_down_no_break,
+            'red_brick': red_brick
         }
     break_L1 = 1 if (prev_close > prev_L1 and latest_close < latest_L1) else 0
     touch_L2 = 1 if (prev_close > prev_L2 * 1.05 and latest_close < latest_L2 * 1.05) else 0
@@ -193,7 +215,8 @@ def generate_buy_signals(data):
         'break_L1': break_L1,
         'touch_L2': touch_L2,
         'breakthrough_confirm': breakthrough_confirm,
-        'short_term_down_no_break': short_term_down_no_break
+        'short_term_down_no_break': short_term_down_no_break,
+        'red_brick': red_brick
     }
 
 def load_low_volatility_stocks():
@@ -277,7 +300,8 @@ def main():
             signals['p2_signal'],
             signals['break_L1'],
             signals['touch_L2'],
-            signals['breakthrough_confirm']
+            signals['breakthrough_confirm'],
+            signals['red_brick']
         ]):
             try:
                 latest_close = data['close'].iloc[-1]
@@ -382,6 +406,7 @@ def main():
                 '股价创新高': is_new_high,
                 '突破确认': signals['breakthrough_confirm'],
                 '短期下跌未破位': signals['short_term_down_no_break'],
+            'red_brick': signals['red_brick'],
                 '优选联盟成员': is_union_member,
                 '低波红利': 1 if symbol in low_volatility_stocks else 0
             })

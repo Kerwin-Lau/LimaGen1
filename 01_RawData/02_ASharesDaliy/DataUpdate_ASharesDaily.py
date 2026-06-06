@@ -121,7 +121,7 @@ class StockDataUpdater:
         else:
             return None
 
-    def get_date_range(self, years=5):
+    def get_date_range(self, years=3):
         """生成动态时间范围"""
         end_date = datetime.now().strftime("%Y%m%d")
         start_date = (datetime.now() - relativedelta(years=years)).strftime("%Y%m%d")
@@ -142,6 +142,93 @@ class StockDataUpdater:
         start_dt = datetime.strptime(start_date, "%Y%m%d")
         end_dt = datetime.strptime(end_date, "%Y%m%d")
         return df[(df['date'] >= start_dt) & (df['date'] <= end_dt)]
+
+    def detect_latest_trade_date(self, codes, min_samples=5, max_samples=10, lookback_days=30):
+        """
+        从给定股票代码中随机抽样，检测最新交易日（参考周线脚本实现）
+
+        Args:
+            codes: 可迭代的股票代码列表
+            min_samples: 最少抽样数量（不超过股票总数）
+            max_samples: 最多抽样数量
+            lookback_days: 回看天数窗口
+        """
+        unique_codes = list({self.pad_stock_code(c) for c in codes if pd.notna(c)})
+        if not unique_codes:
+            return datetime.now().strftime("%Y%m%d")
+
+        # 决定抽样数量：介于 min_samples 和 max_samples 之间，且不超过股票总数
+        sample_count = min(len(unique_codes), max_samples)
+        sample_count = max(sample_count, min(len(unique_codes), min_samples))
+
+        if sample_count <= 0:
+            return datetime.now().strftime("%Y%m%d")
+
+        sample_codes = random.sample(unique_codes, sample_count)
+
+        end_candidate = datetime.now().strftime("%Y%m%d")
+        start_candidate = (datetime.now() - relativedelta(days=lookback_days)).strftime("%Y%m%d")
+
+        latest_dates = []
+
+        for code in sample_codes:
+            price_symbol = self.process_price_code(code)
+            if not price_symbol:
+                continue
+
+            try:
+                df = self.fetch_data_with_retry(
+                    ak.stock_zh_a_daily,
+                    symbol=price_symbol,
+                    adjust="qfq",
+                    start_date=start_candidate,
+                    end_date=end_candidate
+                )
+                if df is None or df.empty:
+                    continue
+
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'])
+                elif 'trade_date' in df.columns:
+                    df['date'] = pd.to_datetime(df['trade_date'])
+                else:
+                    continue
+
+                latest_dates.append(df['date'].max())
+            except Exception:
+                continue
+
+        if not latest_dates:
+            # 如果所有抽样股票都失败，则退回当前日期
+            return datetime.now().strftime("%Y%m%d")
+
+        # 使用出现次数最多的日期作为最新交易日，避免个别异常值影响结果
+        date_series = pd.to_datetime(pd.Series(latest_dates)).dt.normalize()
+        latest_trade_date = date_series.value_counts().idxmax()
+        return latest_trade_date.strftime("%Y%m%d")
+
+    def tdx_sma(self, series, n, m=1):
+        """
+        通达信SMA平滑算法实现
+        SMA(X, N, M) = (M * X + (N - M) * Y_前一日) / N
+        """
+        s = pd.Series(series).astype(float)
+        values = s.values
+        result = np.full_like(values, np.nan, dtype=float)
+
+        prev = np.nan
+        for i, x in enumerate(values):
+            if np.isnan(x):
+                result[i] = prev
+                continue
+
+            if np.isnan(prev):
+                result[i] = x
+            else:
+                result[i] = (m * x + (n - m) * prev) / n
+            prev = result[i]
+
+        return pd.Series(result, index=s.index)
 
     def calculate_kdj(self, df, n=9, m1=3, m2=3):
         """
@@ -223,7 +310,7 @@ class StockDataUpdater:
         return k, d, j
 
     def calculate_ta_indicators(self, df):
-        """计算技术指标（与原版保持一致）"""
+        """计算技术指标（与原版保持一致，并增加砖形图指标）"""
         # KDJ指标 - 使用自定义函数确保与股票软件一致
         df['K'], df['D'], df['J'] = self.calculate_kdj(df, n=9, m1=3, m2=3)
 
@@ -263,6 +350,28 @@ class StockDataUpdater:
         # 短期趋势
         ema10_first = talib.EMA(df['close'], timeperiod=10)
         df['Short_Trend'] = np.round(talib.EMA(ema10_first, timeperiod=10), 2)
+
+        # 砖形图指标（基于通达信公式）
+        hhv_4 = df['high'].rolling(window=4, min_periods=4).max()
+        llv_4 = df['low'].rolling(window=4, min_periods=4).min()
+        denom = (hhv_4 - llv_4).replace(0, np.nan)
+
+        var1a = (hhv_4 - df['close']) / denom * 100 - 90
+        var2a = self.tdx_sma(var1a, n=4, m=1) + 100
+        var3a = (df['close'] - llv_4) / denom * 100
+        var4a = self.tdx_sma(var3a, n=6, m=1)
+        var5a = self.tdx_sma(var4a, n=6, m=1) + 100
+        var6a = var5a - var2a
+
+        brick_value = np.where(var6a > 4, var6a - 4, 0.0)
+        brick_series = pd.Series(brick_value, index=df.index)
+        prev_brick = brick_series.shift(1)
+
+        # 这里直接用“当日砖形图值”和“昨日砖形图值”来编码颜色：
+        # - 若 Brick_High > Brick_Low，则当日砖形图上穿昨日，为红柱
+        # - 若 Brick_High < Brick_Low，则当日砖形图下穿昨日，为绿柱
+        df['Brick_High'] = brick_series
+        df['Brick_Low'] = prev_brick
 
         # PE通道计算
         if 'pe_ttm' in df.columns:
@@ -330,8 +439,9 @@ class StockDataUpdater:
             # 存储阶段
             base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 'outstanding_share',
                          'turnover']
-            ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 'short_term_fund', 'long_term_fund',
-                       'Short_LS', 'Short_Trend']
+            ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD',
+                       'short_term_fund', 'long_term_fund',
+                       'Short_LS', 'Short_Trend', 'Brick_High', 'Brick_Low']
             pe_cols = ['L2', 'L1', 'M', 'H1', 'H2', 'investment_income']
             value_cols = ['market_cap', 'float_market_cap', 'pe_ttm', 'pe_static', 'pb', 'peg', 'pcf', 'ps']
 
@@ -367,16 +477,28 @@ class StockDataUpdater:
             raise Exception(f"合并保存失败: {str(e)[:100]}")
 
     def fetch_data_with_retry(self, func, *args, **kwargs):
-        """带重试机制的数据获取"""
+        """带重试机制和超时控制的数据获取"""
+        timeout_seconds = 15
         for attempt in range(self.retry_attempts):
             try:
-                self.random_sleep(0.1, 0.3)  # 每次请求前短暂延时
-                result = func(*args, **kwargs)
+                self.random_sleep(0.2, 0.5)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(func, *args, **kwargs)
+                    try:
+                        result = future.result(timeout=timeout_seconds)
+                    except concurrent.futures.TimeoutError:
+                        raise TimeoutError(f"请求超时 ({timeout_seconds}秒)")
                 if result is not None and not result.empty:
                     return result
+            except TimeoutError as e:
+                if attempt < self.retry_attempts - 1:
+                    delay = (attempt + 1) * 3
+                    time.sleep(delay)
+                    continue
+                raise e
             except Exception as e:
                 if attempt < self.retry_attempts - 1:
-                    delay = (attempt + 1) * 2  # 递增延时
+                    delay = (attempt + 1) * 2
                     time.sleep(delay)
                     continue
                 raise e
@@ -580,11 +702,15 @@ class StockDataUpdater:
 
                     self.failed_stocks.append((stock_code, reason))
 
-    def main(self):
-        """主函数"""
+    def main(self, max_stocks=None):
+        """主函数
+
+        Args:
+            max_stocks: 若不为 None，则只处理前 max_stocks 只股票
+        """
         # 路径配置
-        excel_path = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesPro\ASharesPro.xlsx"
-        save_dir = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesPro\StocksData"
+        excel_path = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesDaliy\ASharesPro.xlsx"
+        save_dir = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesDaliy\StocksData"
         os.makedirs(save_dir, exist_ok=True)
 
         # 读取Excel文件
@@ -594,6 +720,12 @@ class StockDataUpdater:
             indicator_codes = df.iloc[:, 0].dropna().unique().tolist()
             price_codes = df.iloc[:, 0].dropna().unique().tolist()
             total = len(indicator_codes)
+
+            # 若指定了最大股票数量，则只处理前 max_stocks 只股票（用于快速验证）
+            if max_stocks is not None and total > max_stocks:
+                indicator_codes = indicator_codes[:max_stocks]
+                price_codes = price_codes[:max_stocks]
+                total = len(indicator_codes)
 
             # 预加载股票名称到缓存
             for _, row in df.iterrows():
@@ -616,8 +748,12 @@ class StockDataUpdater:
         print(f"💻 CPU核心数: {physical_cores}核{logical_cores}线程")
         print(f"💾 可用内存: {psutil.virtual_memory().available // (1024 ** 3)} GB")
 
-        # 获取日期范围
-        start_date, end_date = self.get_date_range()
+        # 基于随机多只股票检测最新交易日，并以此回溯 3 年
+        latest_trade_date = self.detect_latest_trade_date(indicator_codes, min_samples=5, max_samples=10,
+                                                          lookback_days=30)
+        start_date = (datetime.strptime(latest_trade_date, "%Y%m%d") - relativedelta(years=3)).strftime("%Y%m%d")
+        end_date = latest_trade_date
+        print(f"📅 最新交易日: {latest_trade_date}")
         print(f"📅 数据日期范围: {start_date} - {end_date}")
 
         start_time = time.time()
@@ -695,6 +831,7 @@ def main():
         base_delay=0.3
     )
 
+    # 处理 ASharesPro.xlsx 中的全部股票
     updater.main()
 
 
