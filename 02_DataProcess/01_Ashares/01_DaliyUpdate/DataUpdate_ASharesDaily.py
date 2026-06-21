@@ -20,6 +20,17 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # ============================ 路径配置（可被外部覆盖）============================
+# A 股行情数据的统一起始日期（全量拉取与对齐窗口的下界）
+# - 选 2020-01-02 是因为 akshare/ak.stock_zh_a_daily 历史稳定性较好，
+#   且对绝大多数 A 股来说能完整覆盖近 6+ 年的交易日。
+# - 该常量同时作用于：
+#     1) 全量拉取时 ak.stock_zh_a_daily(start_date=...)
+#     2) 增量分支里 aligned_history_df 的下界过滤（避免历史窗口被截断）
+# - 增量更新分支不会因为该常量而触发历史重拉：只要 csv 已存在，仍然按
+#   csv A 列(date) 的 max + 1 作为增量起点；该常量只是防止合并时把窗口外
+#   的历史数据丢掉。
+HISTORY_START_DATE = "20200102"
+
 # 默认股票清单：全量 A 股名单
 DEFAULT_STOCK_LIST_PATH = (
     r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1"
@@ -345,16 +356,28 @@ class StockDataUpdater:
 
     def calculate_kdj(self, df, n=9, m1=3, m2=3):
         """
-        计算KDJ指标，与股票软件保持一致
-        使用标准公式：K = (2/3) * K_前一日 + (1/3) * RSV
-                     D = (2/3) * D_前一日 + (1/3) * K
-                     J = 3 * K - 2 * D
+        计算KDJ指标，与通达信/同花顺等股票软件保持一致。
+
+        通达信公式编辑器公式（默认参数 N=9, M1=3, M2=3）：
+            RSV:=(CLOSE-LLV(LOW,N))/(HHV(HIGH,N)-LLV(LOW,N))*100;
+            K:=SMA(RSV,M1,1);     // 通达信SMA(X,N,M)=(M*X+(N-M)*Y')/N
+            D:=SMA(K,M2,1);       // 这里 m=1，n=M1/M2，所以 alpha=1/M1、1/M2
+            J:=3*K-2*D;
+
+        当 M1=M2=3 时，alpha = 1/3，等价于常见的 "K = (2/3)*K' + (1/3)*RSV" 形式，
+        但要求使用通达信原生的 SMA 平滑逻辑（遇 NaN 继承上一交易日的值），
+        不能用普通 EMA（普通 EMA 在 RSV 序列起始的 NaN 段会污染初始递推）。
+
+        关键点（与通达信一致）：
+            - 第一个有效 RSV 出现的位置 i0：K[i0] = RSV[i0]，D[i0] = RSV[i0]
+            - i0 之前无 K/D 值（保持 NaN）
+            - 之后每日 K = SMA(RSV, M1, 1)，D = SMA(K, M2, 1)
 
         Args:
-            df: 包含high, low, close列的DataFrame，必须按时间正序排列
-            n: RSV计算周期，默认9
-            m1: K值平滑周期，默认3（实际使用固定1/3平滑系数）
-            m2: D值平滑周期，默认3（实际使用固定1/3平滑系数）
+            df: 包含 high, low, close 列的 DataFrame，必须按时间正序排列。
+            n: RSV 计算周期，默认 9。
+            m1: K 值平滑周期（SMA 周期），默认 3。
+            m2: D 值平滑周期（SMA 周期），默认 3。
         """
         # 确保数据按时间正序排列并重置索引
         df_work = df.copy()
@@ -368,7 +391,7 @@ class StockDataUpdater:
         close = df_work['close'].values
         length = len(df_work)
 
-        # 计算RSV（未成熟随机值）
+        # 1) 计算 RSV（未成熟随机值）：使用 N 日窗口的 HHV/LLV
         rsv = np.full(length, np.nan)
         for i in range(n - 1, length):
             period_high = high[i - n + 1:i + 1]
@@ -379,45 +402,16 @@ class StockDataUpdater:
             if highest != lowest:
                 rsv[i] = 100 * (close[i] - lowest) / (highest - lowest)
             else:
-                rsv[i] = 50  # 如果最高价等于最低价，RSV设为50
+                rsv[i] = 50  # 最高等于最低时，RSV 设为 50
 
-        # 计算K值和D值（使用EMA平滑，初始值为50）
-        k = np.full(length, np.nan)
-        d = np.full(length, np.nan)
+        # 2) 计算 K 和 D：使用通达信原生 SMA 平滑
+        #    K = SMA(RSV, M1, 1)：首个有效 RSV 即作为 K 初值
+        #    D = SMA(K,   M2, 1)：首个有效 K   即作为 D 初值
+        #    tdx_sma 内部遇 NaN 继承上一交易日值，与通达信行为一致
+        k = self.tdx_sma(pd.Series(rsv), n=m1, m=1).values
+        d = self.tdx_sma(pd.Series(k), n=m2, m=1).values
 
-        # 找到第一个有效的RSV值
-        first_valid_idx = None
-        for i in range(length):
-            if not np.isnan(rsv[i]):
-                first_valid_idx = i
-                break
-
-        if first_valid_idx is not None:
-            # 初始化K和D值
-            # 有些软件使用第一个RSV值作为初始K值，有些使用50
-            # 这里使用第一个RSV值，更符合大多数股票软件的实现
-            k[first_valid_idx] = rsv[first_valid_idx]
-            d[first_valid_idx] = rsv[first_valid_idx]  # D的初始值也使用第一个RSV
-
-            # 计算K值：K = (2/3) * K_前一日 + (1/3) * RSV
-            # 标准KDJ公式，平滑系数固定为1/3
-            alpha_k = 1.0 / 3.0
-            for i in range(first_valid_idx + 1, length):
-                if not np.isnan(rsv[i]):
-                    k[i] = (1 - alpha_k) * k[i - 1] + alpha_k * rsv[i]
-                else:
-                    k[i] = k[i - 1]
-
-            # 计算D值：D = (2/3) * D_前一日 + (1/3) * K
-            # 标准KDJ公式，平滑系数固定为1/3
-            alpha_d = 1.0 / 3.0
-            for i in range(first_valid_idx + 1, length):
-                if not np.isnan(k[i]):
-                    d[i] = (1 - alpha_d) * d[i - 1] + alpha_d * k[i]
-                else:
-                    d[i] = d[i - 1]
-
-        # 计算J值：J = 3 * K - 2 * D
+        # 3) 计算 J：J = 3 * K - 2 * D
         j = 3 * k - 2 * d
 
         return k, d, j
@@ -928,10 +922,15 @@ class StockDataUpdater:
         print(f"💻 CPU核心数: {physical_cores}核{logical_cores}线程")
         print(f"💾 可用内存: {psutil.virtual_memory().available // (1024 ** 3)} GB")
 
-        # 基于随机多只股票检测最新交易日，并以此回溯 3 年
+        # 基于随机多只股票检测最新交易日
+        # 起止日期：
+        #   end_date = 最新交易日
+        #   start_date = 固定为 HISTORY_START_DATE（2020-01-02），
+        #                避免按"回溯 3 年"动态变化导致历史窗口在多次运行间漂移
+        #                或截断 2020 年以来的历史数据。
         latest_trade_date = self.detect_latest_trade_date(indicator_codes, min_samples=5, max_samples=10,
                                                           lookback_days=30)
-        start_date = (datetime.strptime(latest_trade_date, "%Y%m%d") - relativedelta(years=3)).strftime("%Y%m%d")
+        start_date = HISTORY_START_DATE
         end_date = latest_trade_date
         print(f"📅 最新交易日: {latest_trade_date}")
         print(f"📅 数据日期范围: {start_date} - {end_date}")

@@ -178,9 +178,58 @@ class StockDataUpdater:
             weekly = weekly.loc[:, ~weekly.columns.duplicated()]
         return weekly
 
+    def tdx_sma(self, series, n, m=1):
+        """
+        通达信 SMA 平滑算法实现
+        SMA(X, N, M) = (M * X + (N - M) * Y_前一日) / N
+
+        通达信原版行为：
+          - 序列首个非 NaN 值直接作为初值
+          - 后续逐日按公式递推
+          - 遇 NaN 继承上一交易日值
+        """
+        s = pd.Series(series).astype(float)
+        values = s.values
+        result = np.full_like(values, np.nan, dtype=float)
+
+        prev = np.nan
+        for i, x in enumerate(values):
+            if np.isnan(x):
+                result[i] = prev
+                continue
+
+            if np.isnan(prev):
+                result[i] = x
+            else:
+                result[i] = (m * x + (n - m) * prev) / n
+            prev = result[i]
+
+        return pd.Series(result, index=s.index)
+
     def calculate_kdj(self, df, n=9, m1=3, m2=3):
         """
-        计算KDJ指标，与股票软件保持一致
+        计算KDJ指标，与通达信/同花顺等股票软件保持一致。
+
+        通达信公式编辑器公式（默认参数 N=9, M1=3, M2=3）：
+            RSV:=(CLOSE-LLV(LOW,N))/(HHV(HIGH,N)-LLV(LOW,N))*100;
+            K:=SMA(RSV,M1,1);     // 通达信SMA(X,N,M)=(M*X+(N-M)*Y')/N
+            D:=SMA(K,M2,1);       // 这里 m=1，n=M1/M2，所以 alpha=1/M1、1/M2
+            J:=3*K-2*D;
+
+        当 M1=M2=3 时，alpha = 1/3，等价于常见的 "K = (2/3)*K' + (1/3)*RSV" 形式，
+        但要求使用通达信原生的 SMA 平滑逻辑（遇 NaN 继承上一交易日的值），
+        不能用普通 EMA（普通 EMA 在 RSV 序列起始的 NaN 段会污染初始递推）。
+
+        关键点（与通达信一致）：
+            - 第一个有效 RSV 出现的位置 i0：K[i0] = RSV[i0]，D[i0] = RSV[i0]
+            - i0 之前无 K/D 值（保持 NaN）
+            - 之后每日 K = SMA(RSV, M1, 1)，D = SMA(K, M2, 1)
+
+        Args:
+            df: 包含 high, low, close 列的 DataFrame，必须按时间正序排列。
+            n: RSV 计算周期，默认 9。
+            m1: K 值平滑周期（SMA 周期），默认 3。
+            m2: D 值平滑周期（SMA 周期），默认 3。
         """
         df_work = df.copy()
         if 'date' in df_work.columns:
@@ -193,6 +242,7 @@ class StockDataUpdater:
         close = df_work['close'].values
         length = len(df_work)
 
+        # 1) 计算 RSV（未成熟随机值）：使用 N 周窗口的 HHV/LLV
         rsv = np.full(length, np.nan)
         for i in range(n - 1, length):
             period_high = high[i - n + 1:i + 1]
@@ -203,36 +253,18 @@ class StockDataUpdater:
             if highest != lowest:
                 rsv[i] = 100 * (close[i] - lowest) / (highest - lowest)
             else:
-                rsv[i] = 50
+                rsv[i] = 50  # 最高等于最低时，RSV 设为 50
 
-        k = np.full(length, np.nan)
-        d = np.full(length, np.nan)
+        # 2) 计算 K 和 D：使用通达信原生 SMA 平滑
+        #    K = SMA(RSV, M1, 1)：首个有效 RSV 即作为 K 初值
+        #    D = SMA(K,   M2, 1)：首个有效 K   即作为 D 初值
+        #    tdx_sma 内部遇 NaN 继承上一交易日值，与通达信行为一致
+        k = self.tdx_sma(pd.Series(rsv), n=m1, m=1).values
+        d = self.tdx_sma(pd.Series(k), n=m2, m=1).values
 
-        first_valid_idx = None
-        for i in range(length):
-            if not np.isnan(rsv[i]):
-                first_valid_idx = i
-                break
-
-        if first_valid_idx is not None:
-            k[first_valid_idx] = rsv[first_valid_idx]
-            d[first_valid_idx] = rsv[first_valid_idx]
-
-            alpha_k = 1.0 / 3.0
-            for i in range(first_valid_idx + 1, length):
-                if not np.isnan(rsv[i]):
-                    k[i] = (1 - alpha_k) * k[i - 1] + alpha_k * rsv[i]
-                else:
-                    k[i] = k[i - 1]
-
-            alpha_d = 1.0 / 3.0
-            for i in range(first_valid_idx + 1, length):
-                if not np.isnan(k[i]):
-                    d[i] = (1 - alpha_d) * d[i - 1] + alpha_d * k[i]
-                else:
-                    d[i] = d[i - 1]
-
+        # 3) 计算 J：J = 3 * K - 2 * D
         j = 3 * k - 2 * d
+
         return k, d, j
 
     def calculate_ta_indicators(self, df):
