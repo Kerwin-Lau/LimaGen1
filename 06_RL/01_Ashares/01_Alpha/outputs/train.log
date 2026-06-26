@@ -1,0 +1,380 @@
+2026-06-25 12:55:29,032 [INFO] ======================================================================
+2026-06-25 12:55:29,032 [INFO] CMA-ES 训练开始
+2026-06-25 12:55:29,032 [INFO] ======================================================================
+2026-06-25 12:55:29,032 [INFO] 训练区间: 2025-06-25 ~ 2025-09-03
+2026-06-25 12:55:29,032 [INFO] 验证区间: 2025-12-09 ~ 2026-01-28
+2026-06-25 12:55:29,032 [INFO] 测试区间: 2026-04-08 ~ 2026-05-25
+2026-06-25 12:55:29,032 [INFO] 股票池: D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\05_BackTest\01_Ashares\01_List\中证A500.xlsx
+2026-06-25 12:55:29,032 [INFO] 训练用 30 只抽样股票，验证用全部 500 只
+2026-06-25 12:55:29,032 [INFO] 种群大小: 4,  最大代数: 1
+2026-06-25 12:55:29,032 [INFO] 并行 worker: 4
+2026-06-25 12:55:29,032 [INFO] 权重维度: 18,  范围: init × [0.5, 2.0]
+2026-06-25 12:55:29,032 [INFO] 初始权重 (前 5 个): [25.0, 15.0, 10.0, 10.0, 15.0]
+2026-06-25 12:55:29,032 [INFO] ======================================================================
+2026-06-25 12:55:35,696 [WARNING] [train] evaluate failed: 'NoneType' object has no attribute 'reindex'
+2026-06-25 12:55:35,732 [WARNING] [train] evaluate failed: 'NoneType' object has no attribute 'reindex'
+2026-06-25 12:55:35,732 [WARNING] [train] evaluate failed: 'NoneType' object has no attribute 'reindex'
+2026-06-25 12:55:35,732 [WARNING] [train] evaluate failed: 'NoneType' object has no attribute 'reindex'
+2026-06-25 12:55:54,720 [WARNING] [val] evaluate failed: 'NoneType' object has no attribute 'reindex'
+2026-06-25 12:55:54,733 [INFO]   ★ 新最优! train=0  val=0  weights[:5]=[39.88, 9.12, 11.4, 11.12, 21.35]
+2026-06-25 12:55:54,733 [INFO] gen=  1/1  train_best=         0  val_best  =         0  mean=         0  elapsed=  25.7s  total=  0.4min
+2026-06-25 12:55:54,747 [INFO] 💾 Best weights saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\best_weights.json
+2026-06-25 12:55:54,748 [INFO] 💾 History saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\history.json
+2026-06-25 12:55:54,748 [INFO] ======================================================================
+2026-06-25 12:55:54,748 [INFO] 训练结束
+2026-06-25 12:55:54,748 [INFO] ======================================================================
+2026-06-25 12:55:54,748 [INFO] 总代数: 1,  总耗时: 0.4 min
+2026-06-25 12:55:54,748 [INFO] 训练集最优 End Value: 0
+2026-06-25 12:55:54,748 [INFO] 验证集最优 End Value: 0
+2026-06-25 12:55:54,748 [INFO] 最优权重 (vs 初始):
+2026-06-25 12:55:54,749 [INFO]       j_wi_1  init=  25.00  opt=  39.88  ratio= 1.60x
+2026-06-25 12:55:54,749 [INFO]       j_wi_2  init=  15.00  opt=   9.12  ratio= 0.61x
+2026-06-25 12:55:54,749 [INFO]       j_wi_3  init=  10.00  opt=  11.40  ratio= 1.14x
+2026-06-25 12:55:54,749 [INFO]      bp_wi_1  init=  10.00  opt=  11.12  ratio= 1.11x
+2026-06-25 12:55:54,749 [INFO]      bp_wi_2  init=  15.00  opt=  21.35  ratio= 1.42x
+2026-06-25 12:55:54,749 [INFO]      bp_wi_3  init=  25.00  opt=  39.99  ratio= 1.60x
+2026-06-25 12:55:54,749 [INFO]     bbi_wi_1  init=  10.00  opt=  15.46  ratio= 1.55x
+2026-06-25 12:55:54,749 [INFO]     bbi_wi_2  init=   5.00  opt=   2.69  ratio= 0.54x
+2026-06-25 12:55:54,749 [INFO]     bbi_wi_3  init=   5.00  opt=  10.00  ratio= 2.00x
+2026-06-25 12:55:54,749 [INFO]     peb_wi_1  init=  20.00  opt=  24.95  ratio= 1.25x
+2026-06-25 12:55:54,749 [INFO]     peb_wi_2  init=  15.00  opt=  22.33  ratio= 1.49x
+2026-06-25 12:55:54,749 [INFO]     peb_wi_3  init=  25.00  opt=  34.21  ratio= 1.37x
+2026-06-25 12:55:54,749 [INFO]     peb_wi_4  init=  15.00  opt=  14.23  ratio= 0.95x
+2026-06-25 12:55:54,749 [INFO]     peb_wi_5  init=  -5.00  opt=  -9.93  ratio= 1.99x
+2026-06-25 12:55:54,749 [INFO]     peb_wi_6  init= -10.00  opt= -12.87  ratio= 1.29x
+2026-06-25 12:55:54,749 [INFO]      bt_wi_1  init=  10.00  opt=   8.32  ratio= 0.83x
+2026-06-25 12:55:54,749 [INFO]      bt_wi_2  init=  20.00  opt=  32.18  ratio= 1.61x
+2026-06-25 12:55:54,749 [INFO]      pa_wi_1  init=  10.00  opt=   5.21  ratio= 0.52x
+2026-06-25 12:56:37,097 [WARNING] [train] evaluate failed: 'NoneType' object has no attribute 'reindex'
+2026-06-25 12:58:28,446 [INFO] ======================================================================
+2026-06-25 12:58:28,446 [INFO] CMA-ES 训练开始
+2026-06-25 12:58:28,446 [INFO] ======================================================================
+2026-06-25 12:58:28,447 [INFO] 训练区间: 2025-06-25 ~ 2025-09-03
+2026-06-25 12:58:28,447 [INFO] 验证区间: 2025-12-09 ~ 2026-01-28
+2026-06-25 12:58:28,447 [INFO] 测试区间: 2026-04-08 ~ 2026-05-25
+2026-06-25 12:58:28,447 [INFO] 股票池: D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\05_BackTest\01_Ashares\01_List\中证A500.xlsx
+2026-06-25 12:58:28,447 [INFO] 训练用 30 只抽样股票，验证用全部 500 只
+2026-06-25 12:58:28,447 [INFO] 种群大小: 4,  最大代数: 1
+2026-06-25 12:58:28,447 [INFO] 并行 worker: 4
+2026-06-25 12:58:28,447 [INFO] 权重维度: 18,  范围: init × [0.5, 2.0]
+2026-06-25 12:58:28,447 [INFO] 初始权重 (前 5 个): [25.0, 15.0, 10.0, 10.0, 15.0]
+2026-06-25 12:58:28,447 [INFO] ======================================================================
+2026-06-25 12:59:32,247 [INFO]   ★ 新最优! train=620296  val=567628  weights[:5]=[28.0, 12.69, 14.38, 5.77, 14.57]
+2026-06-25 12:59:32,247 [INFO] gen=  1/1  train_best=    620296  val_best  =    567628  mean=    586982  elapsed=  63.8s  total=  1.1min
+2026-06-25 12:59:32,247 [INFO] 💾 Best weights saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\best_weights.json
+2026-06-25 12:59:32,247 [INFO] 💾 History saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\history.json
+2026-06-25 12:59:32,247 [INFO] ======================================================================
+2026-06-25 12:59:32,247 [INFO] 训练结束
+2026-06-25 12:59:32,247 [INFO] ======================================================================
+2026-06-25 12:59:32,247 [INFO] 总代数: 1,  总耗时: 1.1 min
+2026-06-25 12:59:32,247 [INFO] 训练集最优 End Value: 620,296
+2026-06-25 12:59:32,247 [INFO] 验证集最优 End Value: 567,628
+2026-06-25 12:59:32,247 [INFO] 最优权重 (vs 初始):
+2026-06-25 12:59:32,247 [INFO]       j_wi_1  init=  25.00  opt=  28.00  ratio= 1.12x
+2026-06-25 12:59:32,247 [INFO]       j_wi_2  init=  15.00  opt=  12.69  ratio= 0.85x
+2026-06-25 12:59:32,247 [INFO]       j_wi_3  init=  10.00  opt=  14.38  ratio= 1.44x
+2026-06-25 12:59:32,247 [INFO]      bp_wi_1  init=  10.00  opt=   5.77  ratio= 0.58x
+2026-06-25 12:59:32,247 [INFO]      bp_wi_2  init=  15.00  opt=  14.57  ratio= 0.97x
+2026-06-25 12:59:32,247 [INFO]      bp_wi_3  init=  25.00  opt=  39.72  ratio= 1.59x
+2026-06-25 12:59:32,247 [INFO]     bbi_wi_1  init=  10.00  opt=  19.92  ratio= 1.99x
+2026-06-25 12:59:32,247 [INFO]     bbi_wi_2  init=   5.00  opt=   7.29  ratio= 1.46x
+2026-06-25 12:59:32,247 [INFO]     bbi_wi_3  init=   5.00  opt=   3.21  ratio= 0.64x
+2026-06-25 12:59:32,247 [INFO]     peb_wi_1  init=  20.00  opt=  17.51  ratio= 0.88x
+2026-06-25 12:59:32,247 [INFO]     peb_wi_2  init=  15.00  opt=  19.26  ratio= 1.28x
+2026-06-25 12:59:32,247 [INFO]     peb_wi_3  init=  25.00  opt=  22.50  ratio= 0.90x
+2026-06-25 12:59:32,247 [INFO]     peb_wi_4  init=  15.00  opt=  15.74  ratio= 1.05x
+2026-06-25 12:59:32,247 [INFO]     peb_wi_5  init=  -5.00  opt=  -6.19  ratio= 1.24x
+2026-06-25 12:59:32,247 [INFO]     peb_wi_6  init= -10.00  opt= -18.03  ratio= 1.80x
+2026-06-25 12:59:32,247 [INFO]      bt_wi_1  init=  10.00  opt=  12.58  ratio= 1.26x
+2026-06-25 12:59:32,247 [INFO]      bt_wi_2  init=  20.00  opt=  20.49  ratio= 1.02x
+2026-06-25 12:59:32,247 [INFO]      pa_wi_1  init=  10.00  opt=   8.11  ratio= 0.81x
+2026-06-25 13:02:21,481 [INFO] ======================================================================
+2026-06-25 13:02:21,481 [INFO] CMA-ES 训练开始
+2026-06-25 13:02:21,481 [INFO] ======================================================================
+2026-06-25 13:02:21,481 [INFO] 训练区间: 2025-06-25 ~ 2025-09-03
+2026-06-25 13:02:21,481 [INFO] 验证区间: 2025-12-09 ~ 2026-01-28
+2026-06-25 13:02:21,481 [INFO] 测试区间: 2026-04-08 ~ 2026-05-25
+2026-06-25 13:02:21,481 [INFO] 股票池: D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\05_BackTest\01_Ashares\01_List\中证A500.xlsx
+2026-06-25 13:02:21,481 [INFO] 训练用 100 只抽样股票，验证用全部 500 只
+2026-06-25 13:02:21,481 [INFO] 种群大小: 16,  最大代数: 30
+2026-06-25 13:02:21,481 [INFO] 并行 worker: 8
+2026-06-25 13:02:21,481 [INFO] 权重维度: 18,  范围: init × [0.5, 2.0]
+2026-06-25 13:02:21,481 [INFO] 初始权重 (前 5 个): [25.0, 15.0, 10.0, 10.0, 15.0]
+2026-06-25 13:02:21,481 [INFO] ======================================================================
+2026-06-25 13:03:34,534 [INFO]   ★ 新最优! train=586600  val=581058  weights[:5]=[45.59, 8.0, 16.74, 19.67, 12.12]
+2026-06-25 13:03:34,534 [INFO] gen=  1/30  train_best=    586600  val_best  =    581058  mean=    562163  elapsed=  73.1s  total=  1.2min
+2026-06-25 13:04:43,530 [INFO] gen=  2/30  train_best=    579472  val_best  =    559781  mean=    562147  elapsed=  69.0s  total=  2.4min
+2026-06-25 13:05:54,014 [INFO] gen=  3/30  train_best=    607443  val_best  =    574918  mean=    560882  elapsed=  70.5s  total=  3.5min
+2026-06-25 13:07:04,031 [INFO] gen=  4/30  train_best=    581017  val_best  =    550766  mean=    559017  elapsed=  70.0s  total=  4.7min
+2026-06-25 13:08:13,663 [INFO] gen=  5/30  train_best=    602182  val_best  =    563201  mean=    563973  elapsed=  69.6s  total=  5.9min
+2026-06-25 13:09:20,780 [INFO]   ★ 新最优! train=588505  val=585679  weights[:5]=[32.17, 14.9, 15.06, 12.8, 14.05]
+2026-06-25 13:09:20,780 [INFO] gen=  6/30  train_best=    588505  val_best  =    585679  mean=    566105  elapsed=  67.1s  total=  7.0min
+2026-06-25 13:10:26,030 [INFO]   ★ 新最优! train=607798  val=609649  weights[:5]=[17.49, 17.76, 19.99, 16.16, 11.99]
+2026-06-25 13:10:26,030 [INFO] gen=  7/30  train_best=    607798  val_best  =    609649  mean=    563141  elapsed=  65.3s  total=  8.1min
+2026-06-25 13:11:30,997 [INFO] gen=  8/30  train_best=    589260  val_best  =    549677  mean=    559685  elapsed=  65.0s  total=  9.2min
+2026-06-25 13:12:37,147 [INFO] gen=  9/30  train_best=    603430  val_best  =    559015  mean=    564852  elapsed=  66.2s  total= 10.3min
+2026-06-25 13:13:43,114 [INFO] gen= 10/30  train_best=    591483  val_best  =    575081  mean=    563314  elapsed=  66.0s  total= 11.4min
+2026-06-25 13:14:48,414 [INFO] gen= 11/30  train_best=    598461  val_best  =    555715  mean=    574985  elapsed=  65.3s  total= 12.4min
+2026-06-25 13:15:53,797 [INFO] gen= 12/30  train_best=    599663  val_best  =    555906  mean=    569766  elapsed=  65.4s  total= 13.5min
+2026-06-25 13:16:59,247 [INFO]   ★ 新最优! train=610382  val=610162  weights[:5]=[49.5, 23.5, 15.32, 9.13, 8.87]
+2026-06-25 13:16:59,247 [INFO] gen= 13/30  train_best=    610382  val_best  =    610162  mean=    571157  elapsed=  65.5s  total= 14.6min
+2026-06-25 13:18:05,264 [INFO] gen= 14/30  train_best=    600961  val_best  =    564152  mean=    569686  elapsed=  66.0s  total= 15.7min
+2026-06-25 13:19:11,281 [INFO] gen= 15/30  train_best=    597102  val_best  =    547014  mean=    570819  elapsed=  66.0s  total= 16.8min
+2026-06-25 13:20:17,631 [INFO] gen= 16/30  train_best=    602909  val_best  =    554891  mean=    572884  elapsed=  66.4s  total= 17.9min
+2026-06-25 13:21:23,748 [INFO] gen= 17/30  train_best=    619742  val_best  =    584334  mean=    567997  elapsed=  66.1s  total= 19.0min
+2026-06-25 13:22:29,548 [INFO] gen= 18/30  train_best=    611103  val_best  =    575871  mean=    578809  elapsed=  65.8s  total= 20.1min
+2026-06-25 13:23:35,732 [INFO] gen= 19/30  train_best=    604482  val_best  =    564230  mean=    576967  elapsed=  66.2s  total= 21.2min
+2026-06-25 13:24:41,648 [INFO] gen= 20/30  train_best=    621015  val_best  =    584245  mean=    575459  elapsed=  65.9s  total= 22.3min
+2026-06-25 13:25:47,315 [INFO] gen= 21/30  train_best=    611879  val_best  =    562511  mean=    576149  elapsed=  65.7s  total= 23.4min
+2026-06-25 13:26:56,899 [INFO] gen= 22/30  train_best=    586011  val_best  =    533260  mean=    569395  elapsed=  69.6s  total= 24.6min
+2026-06-25 13:28:06,266 [INFO] gen= 23/30  train_best=    616581  val_best  =    567842  mean=    574814  elapsed=  69.4s  total= 25.7min
+2026-06-25 13:29:15,640 [INFO] gen= 24/30  train_best=    606449  val_best  =    577237  mean=    574381  elapsed=  69.4s  total= 26.9min
+2026-06-25 13:30:22,030 [INFO] gen= 25/30  train_best=    626145  val_best  =    592777  mean=    574886  elapsed=  66.4s  total= 28.0min
+2026-06-25 13:31:28,771 [INFO] gen= 26/30  train_best=    605878  val_best  =    569532  mean=    572038  elapsed=  66.7s  total= 29.1min
+2026-06-25 13:32:34,926 [INFO] gen= 27/30  train_best=    616419  val_best  =    584841  mean=    575228  elapsed=  66.2s  total= 30.2min
+2026-06-25 13:33:41,085 [INFO]   ★ 新最优! train=603932  val=644659  weights[:5]=[13.81, 24.7, 5.06, 7.9, 14.27]
+2026-06-25 13:33:41,085 [INFO] gen= 28/30  train_best=    603932  val_best  =    644659  mean=    576596  elapsed=  66.2s  total= 31.3min
+2026-06-25 13:34:48,083 [INFO] gen= 29/30  train_best=    614219  val_best  =    580058  mean=    575469  elapsed=  67.0s  total= 32.4min
+2026-06-25 13:35:56,894 [INFO] gen= 30/30  train_best=    613581  val_best  =    574264  mean=    579542  elapsed=  68.8s  total= 33.6min
+2026-06-25 13:35:56,894 [INFO] 💾 Best weights saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\best_weights.json
+2026-06-25 13:35:56,894 [INFO] 💾 History saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\history.json
+2026-06-25 13:35:56,894 [INFO] ======================================================================
+2026-06-25 13:35:56,894 [INFO] 训练结束
+2026-06-25 13:35:56,894 [INFO] ======================================================================
+2026-06-25 13:35:56,894 [INFO] 总代数: 30,  总耗时: 33.6 min
+2026-06-25 13:35:56,894 [INFO] 训练集最优 End Value: 603,932
+2026-06-25 13:35:56,894 [INFO] 验证集最优 End Value: 644,659
+2026-06-25 13:35:56,894 [INFO] 最优权重 (vs 初始):
+2026-06-25 13:35:56,894 [INFO]       j_wi_1  init=  25.00  opt=  13.81  ratio= 0.55x
+2026-06-25 13:35:56,894 [INFO]       j_wi_2  init=  15.00  opt=  24.70  ratio= 1.65x
+2026-06-25 13:35:56,894 [INFO]       j_wi_3  init=  10.00  opt=   5.06  ratio= 0.51x
+2026-06-25 13:35:56,894 [INFO]      bp_wi_1  init=  10.00  opt=   7.90  ratio= 0.79x
+2026-06-25 13:35:56,894 [INFO]      bp_wi_2  init=  15.00  opt=  14.27  ratio= 0.95x
+2026-06-25 13:35:56,894 [INFO]      bp_wi_3  init=  25.00  opt=  13.54  ratio= 0.54x
+2026-06-25 13:35:56,894 [INFO]     bbi_wi_1  init=  10.00  opt=  11.10  ratio= 1.11x
+2026-06-25 13:35:56,894 [INFO]     bbi_wi_2  init=   5.00  opt=   7.24  ratio= 1.45x
+2026-06-25 13:35:56,894 [INFO]     bbi_wi_3  init=   5.00  opt=   6.38  ratio= 1.28x
+2026-06-25 13:35:56,894 [INFO]     peb_wi_1  init=  20.00  opt=  22.07  ratio= 1.10x
+2026-06-25 13:35:56,894 [INFO]     peb_wi_2  init=  15.00  opt=  26.72  ratio= 1.78x
+2026-06-25 13:35:56,894 [INFO]     peb_wi_3  init=  25.00  opt=  12.65  ratio= 0.51x
+2026-06-25 13:35:56,894 [INFO]     peb_wi_4  init=  15.00  opt=   7.84  ratio= 0.52x
+2026-06-25 13:35:56,894 [INFO]     peb_wi_5  init=  -5.00  opt=  -8.96  ratio= 1.79x
+2026-06-25 13:35:56,894 [INFO]     peb_wi_6  init= -10.00  opt= -19.89  ratio= 1.99x
+2026-06-25 13:35:56,894 [INFO]      bt_wi_1  init=  10.00  opt=   9.63  ratio= 0.96x
+2026-06-25 13:35:56,894 [INFO]      bt_wi_2  init=  20.00  opt=  39.83  ratio= 1.99x
+2026-06-25 13:35:56,894 [INFO]      pa_wi_1  init=  10.00  opt=  12.23  ratio= 1.22x
+2026-06-25 13:35:56,894 [INFO] ======================================================================
+2026-06-25 13:35:56,894 [INFO] 测试集最终评估
+2026-06-25 13:35:56,894 [INFO] ======================================================================
+2026-06-25 13:46:17,567 [INFO] ======================================================================
+2026-06-25 13:46:17,567 [INFO] 测试集最终评估
+2026-06-25 13:46:17,567 [INFO] ======================================================================
+2026-06-25 13:47:01,271 [INFO] 测试集 End Value: 604,499
+2026-06-25 16:03:01,598 [INFO] ======================================================================
+2026-06-25 16:03:01,598 [INFO] CMA-ES 训练开始
+2026-06-25 16:03:01,598 [INFO] ======================================================================
+2026-06-25 16:03:01,598 [INFO] 训练区间: 2025-06-25 ~ 2025-09-03
+2026-06-25 16:03:01,598 [INFO] 验证区间: 2025-12-09 ~ 2026-01-28
+2026-06-25 16:03:01,598 [INFO] 测试区间: 2026-04-08 ~ 2026-05-25
+2026-06-25 16:03:01,598 [INFO] 股票池: D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\05_BackTest\01_Ashares\01_List\中证A500.xlsx
+2026-06-25 16:03:01,598 [INFO] 训练用 30 只抽样股票，验证用全部 500 只
+2026-06-25 16:03:01,598 [INFO] 种群大小: 4,  最大代数: 1
+2026-06-25 16:03:01,598 [INFO] 并行 worker: 4
+2026-06-25 16:03:01,599 [INFO] 权重维度: 21,  范围: init × [0.5, 2.0]
+2026-06-25 16:03:01,599 [INFO] 初始权重 (前 5 个): [13.81, 24.7, 5.06, 7.9, 14.27]
+2026-06-25 16:03:01,599 [INFO] ======================================================================
+2026-06-25 16:03:46,669 [INFO]   ★ 新最优! train=606755  val=577985  weights[:5]=[14.25, 18.69, 5.65, 14.5, 14.9]
+2026-06-25 16:03:46,670 [INFO] gen=  1/1  train_best=    606755  val_best  =    577985  mean=    596229  elapsed=  45.1s  total=  0.8min
+2026-06-25 16:03:46,671 [INFO] 💾 Best weights saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\best_weights.json
+2026-06-25 16:03:46,672 [INFO] 💾 History saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\history.json
+2026-06-25 16:03:46,672 [INFO] ======================================================================
+2026-06-25 16:03:46,672 [INFO] 训练结束
+2026-06-25 16:03:46,672 [INFO] ======================================================================
+2026-06-25 16:03:46,672 [INFO] 总代数: 1,  总耗时: 0.8 min
+2026-06-25 16:03:46,672 [INFO] 训练集最优 End Value: 606,755
+2026-06-25 16:03:46,672 [INFO] 验证集最优 End Value: 577,985
+2026-06-25 16:03:46,672 [INFO] 最优权重 (vs 初始):
+2026-06-25 16:03:46,672 [INFO]       j_wi_1  init=  13.81  opt=  14.25  ratio= 1.03x
+2026-06-25 16:03:46,672 [INFO]       j_wi_2  init=  24.70  opt=  18.69  ratio= 0.76x
+2026-06-25 16:03:46,672 [INFO]       j_wi_3  init=   5.06  opt=   5.65  ratio= 1.12x
+2026-06-25 16:03:46,672 [INFO]      bp_wi_1  init=   7.90  opt=  14.50  ratio= 1.84x
+2026-06-25 16:03:46,672 [INFO]      bp_wi_2  init=  14.27  opt=  14.90  ratio= 1.04x
+2026-06-25 16:03:46,673 [INFO]      bp_wi_3  init=  13.54  opt=  17.13  ratio= 1.27x
+2026-06-25 16:03:46,673 [INFO]     bbi_wi_1  init=  11.10  opt=  20.41  ratio= 1.84x
+2026-06-25 16:03:46,673 [INFO]     bbi_wi_2  init=   7.24  opt=   4.26  ratio= 0.59x
+2026-06-25 16:03:46,673 [INFO]     bbi_wi_3  init=   6.38  opt=   8.23  ratio= 1.29x
+2026-06-25 16:03:46,673 [INFO]     peb_wi_1  init=  22.07  opt=  25.85  ratio= 1.17x
+2026-06-25 16:03:46,673 [INFO]     peb_wi_2  init=  26.72  opt=  35.79  ratio= 1.34x
+2026-06-25 16:03:46,673 [INFO]     peb_wi_3  init=  12.65  opt=   6.55  ratio= 0.52x
+2026-06-25 16:03:46,673 [INFO]     peb_wi_4  init=   7.84  opt=  12.55  ratio= 1.60x
+2026-06-25 16:03:46,673 [INFO]     peb_wi_5  init=  -8.96  opt= -11.42  ratio= 1.27x
+2026-06-25 16:03:46,673 [INFO]     peb_wi_6  init= -19.89  opt= -39.73  ratio= 2.00x
+2026-06-25 16:03:46,673 [INFO]      bt_wi_1  init=   9.63  opt=  15.05  ratio= 1.56x
+2026-06-25 16:03:46,673 [INFO]      bt_wi_2  init=  39.83  opt=  74.99  ratio= 1.88x
+2026-06-25 16:03:46,674 [INFO]      pa_wi_1  init=  12.23  opt=  23.27  ratio= 1.90x
+2026-06-25 16:03:46,674 [INFO]      yw_wi_1  init=  10.00  opt=  12.27  ratio= 1.23x
+2026-06-25 16:03:46,674 [INFO]      yw_wi_2  init=  10.00  opt=   5.91  ratio= 0.59x
+2026-06-25 16:03:46,674 [INFO]      yw_wi_3  init=  10.00  opt=  14.68  ratio= 1.47x
+2026-06-25 16:04:30,745 [INFO] ======================================================================
+2026-06-25 16:04:30,745 [INFO] CMA-ES 训练开始
+2026-06-25 16:04:30,745 [INFO] ======================================================================
+2026-06-25 16:04:30,745 [INFO] 训练区间: 2025-06-25 ~ 2025-09-03
+2026-06-25 16:04:30,746 [INFO] 验证区间: 2025-12-09 ~ 2026-01-28
+2026-06-25 16:04:30,746 [INFO] 测试区间: 2026-04-08 ~ 2026-05-25
+2026-06-25 16:04:30,746 [INFO] 股票池: D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\05_BackTest\01_Ashares\01_List\中证A500.xlsx
+2026-06-25 16:04:30,746 [INFO] 训练用 100 只抽样股票，验证用全部 500 只
+2026-06-25 16:04:30,746 [INFO] 种群大小: 16,  最大代数: 30
+2026-06-25 16:04:30,748 [INFO] 并行 worker: 8
+2026-06-25 16:04:30,748 [INFO] 权重维度: 21,  范围: init × [0.5, 2.0]
+2026-06-25 16:04:30,749 [INFO] 初始权重 (前 5 个): [13.81, 24.7, 5.06, 7.9, 14.27]
+2026-06-25 16:04:30,749 [INFO] ======================================================================
+2026-06-25 16:05:49,609 [INFO]   ★ 新最优! train=603652  val=559706  weights[:5]=[15.79, 27.01, 9.17, 6.25, 15.1]
+2026-06-25 16:05:49,609 [INFO] gen=  1/30  train_best=    603652  val_best  =    559706  mean=    557836  elapsed=  78.9s  total=  1.3min
+2026-06-25 16:07:01,239 [INFO]   ★ 新最优! train=617109  val=581343  weights[:5]=[16.27, 43.6, 3.23, 6.02, 13.16]
+2026-06-25 16:07:01,239 [INFO] gen=  2/30  train_best=    617109  val_best  =    581343  mean=    562814  elapsed=  71.6s  total=  2.5min
+2026-06-25 16:08:12,734 [INFO]   ★ 新最优! train=594264  val=602271  weights[:5]=[14.2, 48.73, 6.97, 8.98, 12.67]
+2026-06-25 16:08:12,735 [INFO] gen=  3/30  train_best=    594264  val_best  =    602271  mean=    564445  elapsed=  71.5s  total=  3.7min
+2026-06-25 16:09:22,797 [INFO] gen=  4/30  train_best=    605244  val_best  =    599283  mean=    579013  elapsed=  70.1s  total=  4.9min
+2026-06-25 16:10:32,285 [INFO]   ★ 新最优! train=613393  val=629862  weights[:5]=[24.62, 47.41, 5.25, 4.56, 7.14]
+2026-06-25 16:10:32,285 [INFO] gen=  5/30  train_best=    613393  val_best  =    629862  mean=    582340  elapsed=  69.5s  total=  6.0min
+2026-06-25 16:11:41,430 [INFO] gen=  6/30  train_best=    607069  val_best  =    609825  mean=    578593  elapsed=  69.1s  total=  7.2min
+2026-06-25 16:12:51,132 [INFO] gen=  7/30  train_best=    619372  val_best  =    620691  mean=    589930  elapsed=  69.7s  total=  8.3min
+2026-06-25 16:14:00,395 [INFO] gen=  8/30  train_best=    623300  val_best  =    608634  mean=    598776  elapsed=  69.3s  total=  9.5min
+2026-06-25 16:15:09,640 [INFO] gen=  9/30  train_best=    633957  val_best  =    600511  mean=    583095  elapsed=  69.2s  total= 10.6min
+2026-06-25 16:16:18,969 [INFO] gen= 10/30  train_best=    623316  val_best  =    599277  mean=    589606  elapsed=  69.3s  total= 11.8min
+2026-06-25 16:17:27,956 [INFO] gen= 11/30  train_best=    617926  val_best  =    598107  mean=    585757  elapsed=  69.0s  total= 13.0min
+2026-06-25 16:18:37,228 [INFO] gen= 12/30  train_best=    617938  val_best  =    590044  mean=    592892  elapsed=  69.3s  total= 14.1min
+2026-06-25 16:19:43,418 [INFO] gen= 13/30  train_best=    613018  val_best  =    597247  mean=    590671  elapsed=  66.2s  total= 15.2min
+2026-06-25 16:20:49,926 [INFO] gen= 14/30  train_best=    621446  val_best  =    605249  mean=    596155  elapsed=  66.5s  total= 16.3min
+2026-06-25 16:21:56,031 [INFO] gen= 15/30  train_best=    605790  val_best  =    611349  mean=    580128  elapsed=  66.1s  total= 17.4min
+2026-06-25 16:23:02,565 [INFO] gen= 16/30  train_best=    614352  val_best  =    593137  mean=    582591  elapsed=  66.5s  total= 18.5min
+2026-06-25 16:24:09,140 [INFO] gen= 17/30  train_best=    631981  val_best  =    581767  mean=    591896  elapsed=  66.6s  total= 19.6min
+2026-06-25 16:25:15,365 [INFO] gen= 18/30  train_best=    620822  val_best  =    597842  mean=    587631  elapsed=  66.2s  total= 20.7min
+2026-06-25 16:26:22,408 [INFO] gen= 19/30  train_best=    611887  val_best  =    616378  mean=    579891  elapsed=  67.0s  total= 21.9min
+2026-06-25 16:27:28,819 [INFO] gen= 20/30  train_best=    611690  val_best  =    601828  mean=    580774  elapsed=  66.4s  total= 23.0min
+2026-06-25 16:28:35,574 [INFO] gen= 21/30  train_best=    616622  val_best  =    588424  mean=    586181  elapsed=  66.8s  total= 24.1min
+2026-06-25 16:29:42,473 [INFO] gen= 22/30  train_best=    632614  val_best  =    603596  mean=    590034  elapsed=  66.9s  total= 25.2min
+2026-06-25 16:30:48,817 [INFO] gen= 23/30  train_best=    623636  val_best  =    607122  mean=    589334  elapsed=  66.3s  total= 26.3min
+2026-06-25 16:31:55,221 [INFO] gen= 24/30  train_best=    619323  val_best  =    594281  mean=    584335  elapsed=  66.4s  total= 27.4min
+2026-06-25 16:33:01,634 [INFO] gen= 25/30  train_best=    600418  val_best  =    608850  mean=    575998  elapsed=  66.4s  total= 28.5min
+2026-06-25 16:34:08,118 [INFO] gen= 26/30  train_best=    597109  val_best  =    625396  mean=    572385  elapsed=  66.5s  total= 29.6min
+2026-06-25 16:35:14,215 [INFO] gen= 27/30  train_best=    625522  val_best  =    592380  mean=    587208  elapsed=  66.1s  total= 30.7min
+2026-06-25 16:36:23,068 [INFO] gen= 28/30  train_best=    619080  val_best  =    570942  mean=    589793  elapsed=  68.9s  total= 31.9min
+2026-06-25 16:37:32,523 [INFO] gen= 29/30  train_best=    612059  val_best  =    597791  mean=    587648  elapsed=  69.5s  total= 33.0min
+2026-06-25 16:38:40,823 [INFO] gen= 30/30  train_best=    618770  val_best  =    562211  mean=    582198  elapsed=  68.3s  total= 34.2min
+2026-06-25 16:38:40,823 [INFO] 💾 Best weights saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\best_weights.json
+2026-06-25 16:38:40,823 [INFO] 💾 History saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\history.json
+2026-06-25 16:38:40,823 [INFO] ======================================================================
+2026-06-25 16:38:40,823 [INFO] 训练结束
+2026-06-25 16:38:40,823 [INFO] ======================================================================
+2026-06-25 16:38:40,823 [INFO] 总代数: 30,  总耗时: 34.2 min
+2026-06-25 16:38:40,823 [INFO] 训练集最优 End Value: 613,393
+2026-06-25 16:38:40,823 [INFO] 验证集最优 End Value: 629,862
+2026-06-25 16:38:40,823 [INFO] 最优权重 (vs 初始):
+2026-06-25 16:38:40,823 [INFO]       j_wi_1  init=  13.81  opt=  24.62  ratio= 1.78x
+2026-06-25 16:38:40,823 [INFO]       j_wi_2  init=  24.70  opt=  47.41  ratio= 1.92x
+2026-06-25 16:38:40,823 [INFO]       j_wi_3  init=   5.06  opt=   5.25  ratio= 1.04x
+2026-06-25 16:38:40,823 [INFO]      bp_wi_1  init=   7.90  opt=   4.56  ratio= 0.58x
+2026-06-25 16:38:40,823 [INFO]      bp_wi_2  init=  14.27  opt=   7.14  ratio= 0.50x
+2026-06-25 16:38:40,823 [INFO]      bp_wi_3  init=  13.54  opt=  13.39  ratio= 0.99x
+2026-06-25 16:38:40,823 [INFO]     bbi_wi_1  init=  11.10  opt=  12.73  ratio= 1.15x
+2026-06-25 16:38:40,823 [INFO]     bbi_wi_2  init=   7.24  opt=   5.43  ratio= 0.75x
+2026-06-25 16:38:40,823 [INFO]     bbi_wi_3  init=   6.38  opt=   7.07  ratio= 1.11x
+2026-06-25 16:38:40,823 [INFO]     peb_wi_1  init=  22.07  opt=  11.64  ratio= 0.53x
+2026-06-25 16:38:40,823 [INFO]     peb_wi_2  init=  26.72  opt=  41.14  ratio= 1.54x
+2026-06-25 16:38:40,823 [INFO]     peb_wi_3  init=  12.65  opt=   6.75  ratio= 0.53x
+2026-06-25 16:38:40,823 [INFO]     peb_wi_4  init=   7.84  opt=  12.99  ratio= 1.66x
+2026-06-25 16:38:40,823 [INFO]     peb_wi_5  init=  -8.96  opt= -13.66  ratio= 1.52x
+2026-06-25 16:38:40,823 [INFO]     peb_wi_6  init= -19.89  opt= -23.75  ratio= 1.19x
+2026-06-25 16:38:40,823 [INFO]      bt_wi_1  init=   9.63  opt=  10.72  ratio= 1.11x
+2026-06-25 16:38:40,823 [INFO]      bt_wi_2  init=  39.83  opt=  79.58  ratio= 2.00x
+2026-06-25 16:38:40,823 [INFO]      pa_wi_1  init=  12.23  opt=  10.98  ratio= 0.90x
+2026-06-25 16:38:40,823 [INFO]      yw_wi_1  init=  10.00  opt=   9.44  ratio= 0.94x
+2026-06-25 16:38:40,823 [INFO]      yw_wi_2  init=  10.00  opt=  18.30  ratio= 1.83x
+2026-06-25 16:38:40,823 [INFO]      yw_wi_3  init=  10.00  opt=  13.34  ratio= 1.33x
+2026-06-25 16:38:40,823 [INFO] ======================================================================
+2026-06-25 16:38:40,823 [INFO] 测试集最终评估
+2026-06-25 16:38:40,823 [INFO] ======================================================================
+2026-06-25 16:39:06,922 [INFO] 测试集 End Value: 561,591
+2026-06-25 22:13:11,692 [INFO] ======================================================================
+2026-06-25 22:13:11,692 [INFO] CMA-ES 训练开始
+2026-06-25 22:13:11,692 [INFO] ======================================================================
+2026-06-25 22:13:11,692 [INFO] 训练区间: 2025-06-25 ~ 2025-09-03
+2026-06-25 22:13:11,692 [INFO] 验证区间: 2025-12-09 ~ 2026-01-28
+2026-06-25 22:13:11,692 [INFO] 测试区间: 2026-04-08 ~ 2026-05-25
+2026-06-25 22:13:11,692 [INFO] 股票池: D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\05_BackTest\01_Ashares\01_List\中证A500.xlsx
+2026-06-25 22:13:11,692 [INFO] 训练用 100 只抽样股票，验证用全部 500 只
+2026-06-25 22:13:11,692 [INFO] 种群大小: 16,  最大代数: 30
+2026-06-25 22:13:11,692 [INFO] 并行 worker: 8
+2026-06-25 22:13:11,692 [INFO] 权重维度: 21,  范围: init × [0.01, 5.0]
+2026-06-25 22:13:11,692 [INFO] 初始权重 (前 5 个): [13.81, 24.7, 5.06, 7.9, 14.27]
+2026-06-25 22:13:11,692 [INFO] ======================================================================
+2026-06-25 22:14:40,785 [INFO]   ★ 新最优! train=598945  val=578351  weights[:5]=[55.7, 38.63, 21.7, 11.36, 30.4]
+2026-06-25 22:14:40,785 [INFO] gen=  1/30  train_best=    598945  val_best  =    578351  mean=    566585  elapsed=  89.1s  total=  1.5min
+2026-06-25 22:16:05,156 [INFO] gen=  2/30  train_best=    593772  val_best  =    559296  mean=    555311  elapsed=  84.4s  total=  2.9min
+2026-06-25 22:17:22,940 [INFO]   ★ 新最优! train=592894  val=601633  weights[:5]=[28.29, 0.25, 13.55, 36.96, 36.49]
+2026-06-25 22:17:22,940 [INFO] gen=  3/30  train_best=    592894  val_best  =    601633  mean=    562754  elapsed=  77.8s  total=  4.2min
+2026-06-25 22:18:40,173 [INFO] gen=  4/30  train_best=    595379  val_best  =    546637  mean=    573635  elapsed=  77.2s  total=  5.5min
+2026-06-25 22:19:57,729 [INFO] gen=  5/30  train_best=    608997  val_best  =    559562  mean=    579160  elapsed=  77.6s  total=  6.8min
+2026-06-25 22:21:14,894 [INFO] gen=  6/30  train_best=    626367  val_best  =    558080  mean=    582997  elapsed=  77.2s  total=  8.1min
+2026-06-25 22:22:34,509 [INFO] gen=  7/30  train_best=    625386  val_best  =    600450  mean=    585157  elapsed=  79.6s  total=  9.4min
+2026-06-25 22:23:53,453 [INFO] gen=  8/30  train_best=    633125  val_best  =    563322  mean=    591812  elapsed=  78.9s  total= 10.7min
+2026-06-25 22:25:08,592 [INFO]   ★ 新最优! train=618987  val=618712  weights[:5]=[12.74, 1.66, 14.76, 33.24, 53.45]
+2026-06-25 22:25:08,592 [INFO] gen=  9/30  train_best=    618987  val_best  =    618712  mean=    584027  elapsed=  75.1s  total= 11.9min
+2026-06-25 22:26:26,055 [INFO] gen= 10/30  train_best=    602629  val_best  =    590584  mean=    582614  elapsed=  77.5s  total= 13.2min
+2026-06-25 22:27:42,785 [INFO] gen= 11/30  train_best=    605260  val_best  =    612990  mean=    577679  elapsed=  76.7s  total= 14.5min
+2026-06-25 22:28:58,164 [INFO]   ★ 新最优! train=628511  val=622913  weights[:5]=[3.14, 48.65, 24.76, 20.83, 38.43]
+2026-06-25 22:28:58,164 [INFO] gen= 12/30  train_best=    628511  val_best  =    622913  mean=    584022  elapsed=  75.4s  total= 15.8min
+2026-06-25 22:30:13,653 [INFO] gen= 13/30  train_best=    625814  val_best  =    573935  mean=    581242  elapsed=  75.5s  total= 17.0min
+2026-06-25 22:31:28,991 [INFO]   ★ 新最优! train=616192  val=641226  weights[:5]=[45.0, 23.9, 25.28, 17.49, 60.27]
+2026-06-25 22:31:28,991 [INFO] gen= 14/30  train_best=    616192  val_best  =    641226  mean=    578584  elapsed=  75.3s  total= 18.3min
+2026-06-25 22:32:43,974 [INFO] gen= 15/30  train_best=    603230  val_best  =    553386  mean=    575053  elapsed=  75.0s  total= 19.5min
+2026-06-25 22:33:59,705 [INFO] gen= 16/30  train_best=    603955  val_best  =    544173  mean=    576636  elapsed=  75.7s  total= 20.8min
+2026-06-25 22:35:14,853 [INFO] gen= 17/30  train_best=    619081  val_best  =    606838  mean=    582664  elapsed=  75.1s  total= 22.1min
+2026-06-25 22:36:29,761 [INFO] gen= 18/30  train_best=    605864  val_best  =    560461  mean=    578676  elapsed=  74.9s  total= 23.3min
+2026-06-25 22:37:45,161 [INFO] gen= 19/30  train_best=    604060  val_best  =    606139  mean=    573116  elapsed=  75.4s  total= 24.6min
+2026-06-25 22:39:00,156 [INFO] gen= 20/30  train_best=    610744  val_best  =    584819  mean=    568922  elapsed=  75.0s  total= 25.8min
+2026-06-25 22:40:15,010 [INFO] gen= 21/30  train_best=    596437  val_best  =    557776  mean=    568179  elapsed=  74.9s  total= 27.1min
+2026-06-25 22:41:30,314 [INFO] gen= 22/30  train_best=    605658  val_best  =    588893  mean=    573113  elapsed=  75.3s  total= 28.3min
+2026-06-25 22:42:44,717 [INFO] gen= 23/30  train_best=    614477  val_best  =    578736  mean=    567174  elapsed=  74.4s  total= 29.6min
+2026-06-25 22:44:00,440 [INFO] gen= 24/30  train_best=    606892  val_best  =    555457  mean=    560681  elapsed=  75.7s  total= 30.8min
+2026-06-25 22:45:15,172 [INFO] gen= 25/30  train_best=    618823  val_best  =    572035  mean=    568712  elapsed=  74.7s  total= 32.1min
+2026-06-25 22:46:30,039 [INFO] gen= 26/30  train_best=    607611  val_best  =    573002  mean=    574450  elapsed=  74.9s  total= 33.3min
+2026-06-25 22:47:46,956 [INFO] gen= 27/30  train_best=    625466  val_best  =    591803  mean=    580405  elapsed=  76.9s  total= 34.6min
+2026-06-25 22:49:12,232 [INFO] gen= 28/30  train_best=    619145  val_best  =    582065  mean=    584281  elapsed=  85.3s  total= 36.0min
+2026-06-25 22:50:43,208 [INFO] gen= 29/30  train_best=    635546  val_best  =    572007  mean=    584621  elapsed=  91.0s  total= 37.5min
+2026-06-25 22:52:21,782 [INFO] gen= 30/30  train_best=    607430  val_best  =    620151  mean=    581396  elapsed=  98.6s  total= 39.2min
+2026-06-25 22:52:21,783 [INFO] 💾 Best weights saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\best_weights.json
+2026-06-25 22:52:21,786 [INFO] 💾 History saved → D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\06_RL\01_Ashares\01_Alpha\outputs\history.json
+2026-06-25 22:52:21,786 [INFO] ======================================================================
+2026-06-25 22:52:21,786 [INFO] 训练结束
+2026-06-25 22:52:21,786 [INFO] ======================================================================
+2026-06-25 22:52:21,786 [INFO] 总代数: 30,  总耗时: 39.2 min
+2026-06-25 22:52:21,786 [INFO] 训练集最优 End Value: 616,192
+2026-06-25 22:52:21,786 [INFO] 验证集最优 End Value: 641,226
+2026-06-25 22:52:21,786 [INFO] 最优权重 (vs 初始):
+2026-06-25 22:52:21,786 [INFO]       j_wi_1  init=  13.81  opt=  45.00  ratio= 3.26x
+2026-06-25 22:52:21,787 [INFO]       j_wi_2  init=  24.70  opt=  23.90  ratio= 0.97x
+2026-06-25 22:52:21,787 [INFO]       j_wi_3  init=   5.06  opt=  25.28  ratio= 5.00x
+2026-06-25 22:52:21,787 [INFO]      bp_wi_1  init=   7.90  opt=  17.49  ratio= 2.21x
+2026-06-25 22:52:21,787 [INFO]      bp_wi_2  init=  14.27  opt=  60.27  ratio= 4.22x
+2026-06-25 22:52:21,787 [INFO]      bp_wi_3  init=  13.54  opt=   3.13  ratio= 0.23x
+2026-06-25 22:52:21,787 [INFO]     bbi_wi_1  init=  11.10  opt=  30.75  ratio= 2.77x
+2026-06-25 22:52:21,787 [INFO]     bbi_wi_2  init=   7.24  opt=  35.20  ratio= 4.86x
+2026-06-25 22:52:21,787 [INFO]     bbi_wi_3  init=   6.38  opt=  11.77  ratio= 1.85x
+2026-06-25 22:52:21,787 [INFO]     peb_wi_1  init=  22.07  opt=  53.62  ratio= 2.43x
+2026-06-25 22:52:21,787 [INFO]     peb_wi_2  init=  26.72  opt=  30.65  ratio= 1.15x
+2026-06-25 22:52:21,788 [INFO]     peb_wi_3  init=  12.65  opt=   8.50  ratio= 0.67x
+2026-06-25 22:52:21,788 [INFO]     peb_wi_4  init=   7.84  opt=   8.48  ratio= 1.08x
+2026-06-25 22:52:21,788 [INFO]     peb_wi_5  init=  -8.96  opt= -12.32  ratio= 1.37x
+2026-06-25 22:52:21,788 [INFO]     peb_wi_6  init= -19.89  opt= -30.48  ratio= 1.53x
+2026-06-25 22:52:21,788 [INFO]      bt_wi_1  init=   9.63  opt=  11.74  ratio= 1.22x
+2026-06-25 22:52:21,788 [INFO]      bt_wi_2  init=  39.83  opt=  88.57  ratio= 2.22x
+2026-06-25 22:52:21,788 [INFO]      pa_wi_1  init=  12.23  opt=   0.17  ratio= 0.01x
+2026-06-25 22:52:21,788 [INFO]      yw_wi_1  init=  10.00  opt=  36.30  ratio= 3.63x
+2026-06-25 22:52:21,788 [INFO]      yw_wi_2  init=  10.00  opt=  49.85  ratio= 4.98x
+2026-06-25 22:52:21,788 [INFO]      yw_wi_3  init=  10.00  opt=  35.25  ratio= 3.53x
+2026-06-25 22:52:21,788 [INFO] ======================================================================
+2026-06-25 22:52:21,788 [INFO] 测试集最终评估
+2026-06-25 22:52:21,788 [INFO] ======================================================================
+2026-06-25 22:52:58,035 [INFO] 测试集 End Value: 661,844

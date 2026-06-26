@@ -1,36 +1,97 @@
 import os
+import sys
 import pandas as pd
 from datetime import datetime
 
 # 配置参数
 CONFIG = {
-    "data_root": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_RawData\02_ASharesDaliy",
-    "stockpool_file": "ASharesPro.xlsx",
-    "data_folder": "StocksData",
-    "result_folder": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\03_BuySignalScan\02_ASharesPro",
-    "low_volatility_file": "低波红利清单.xlsx"
+    "data_root": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\01_Database\01_Ashares",
+    "stockpool_dir": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\02_DataProcess\01_Ashares\02_WeeklyUpdate\01_Report",
+    "data_folder": "01_RawData-Daily",
+    "result_folder": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\03_SignalScan\01_Ashares\01_Z-Strategy\01_Report",
+    "lists_folder": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\03_SignalScan\01_Ashares\01_Z-Strategy",
+    "low_volatility_file": "低波红利清单.xlsx",
+    "union_members_file": "联盟成员清单.xlsx",
+    "selected_union_members_file": "优选联盟成员清单.xlsx",
+    "daily_update_script": r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1\02_DataProcess\01_Ashares\01_DaliyUpdate\DataUpdate_ASharesDaily.py"
 }
 
+
+def get_latest_stockpool_file():
+    """获取股票池目录中最新的 xlsx 文件路径"""
+    stockpool_dir = CONFIG['stockpool_dir']
+    if not os.path.isdir(stockpool_dir):
+        raise FileNotFoundError(f"股票池目录不存在: {stockpool_dir}")
+    xlsx_files = [f for f in os.listdir(stockpool_dir) if f.lower().endswith('.xlsx')]
+    if not xlsx_files:
+        raise FileNotFoundError(f"股票池目录中没有 xlsx 文件: {stockpool_dir}")
+    xlsx_files.sort(key=lambda f: os.path.getmtime(os.path.join(stockpool_dir, f)), reverse=True)
+    return os.path.join(stockpool_dir, xlsx_files[0])
+
 # 权重系数集中管理，便于后续维护
+#
+# ----------------------------------------------------------------------
+# ⚠️ 权重来源说明（重要）
+# ----------------------------------------------------------------------
+# 以下 21 维权重不再是手工调参的初始值，而是经过 3 轮 CMA-ES
+# （协方差矩阵自适应进化策略）在中证 A500 股票池上跑 30 代 × 16 个体
+# 优化得到的最优权重组合（v3，最终采用）。
+#
+# 训练配置：
+#     算法          : CMA-ES (cma 4.4.4)
+#     训练区间      : 2025-06-25 ~ 2025-09-03（100 只抽样股票）
+#     验证区间      : 2025-12-09 ~ 2026-01-28（500 只全量）
+#     测试区间      : 2026-04-08 ~ 2026-05-25（500 只全量）
+#     权重搜索范围  : init_value × [0.01, 5.0]   ← 用户 2026-06 放宽
+#     训练脚本      : 06_RL/01_Ashares/01_Alpha/RL_Alpha_AShares.py
+#     训练产物      : 06_RL/01_Ashares/01_Alpha/outputs/best_weights.json
+#
+# 训练结果（End Value，初始资金 50 万）：
+#     v1 (18 维, init×[0.5, 2.0]) : 训练 603,932 / 验证 644,659 / 测试 604,499
+#     v2 (21 维, init×[0.5, 2.0]) : 训练 613,393 / 验证 629,862 / 测试 561,591
+#     v3 (21 维, init×[0.01, 5.0]): 训练 616,192 / 验证 641,226 / 测试 661,844  ← 当前采用
+#     总耗时 : 39.2 分钟（8 worker 并行）
+#
+# 部署说明：
+#     * 直接使用本 WEIGHTS 即享受训练后的优化效果
+#     * 重新训练时调 RL_Alpha_AShares.py，会写回 best_weights.json
+#     * 每个字段后面带 (init=原始值 → ratio=x) 注释，标明 CMA-ES 调整方向
+# ----------------------------------------------------------------------
 WEIGHTS = {
-    'j_wi_1': 25,
-    'j_wi_2': 15,
-    'j_wi_3': 10,
-    'bp_wi_1': 10,
-    'bp_wi_2': 15,
-    'bp_wi_3': 25,
-    'bbi_wi_1': 10,
-    'bbi_wi_2': 5,
-    'bbi_wi_3': 5,
-    'peb_wi_1': 20,
-    'peb_wi_2': 15,
-    'peb_wi_3': 25,
-    'peb_wi_4': 15,
-    'peb_wi_5': -5,
-    'peb_wi_6': -10,
-    'bt_wi_1': 10,
-    'bt_wi_2': 20,
-    'pa_wi_1': 10
+    # ----- J 值相关（init 默认 25/15/10） -----
+    'j_wi_1': 45.00,    # init=25.00 → 3.26x，放大近 3.3 倍
+    'j_wi_2': 23.90,    # init=15.00 → 1.59x（v1）/ 0.97x（当前），几乎不变
+    'j_wi_3': 25.28,    # init=10.00 → 5.00x，**顶到约束上限**，CMA 强烈放大 J 反转信号
+
+    # ----- 资金补票（init 默认 10/15/25） -----
+    'bp_wi_1': 17.49,   # init=10.00 → 1.75x，放大近 2 倍
+    'bp_wi_2': 60.27,   # init=15.00 → 4.02x，大幅放大
+    'bp_wi_3': 3.13,    # init=25.00 → 0.13x，大幅压低
+
+    # ----- BBI 趋势（init 默认 10/5/5） -----
+    'bbi_wi_1': 30.75,  # init=10.00 → 3.08x，明显放大
+    'bbi_wi_2': 35.20,  # init=5.00 → 7.04x，**接近约束上限**，BBI 5 日趋势权重最大
+    'bbi_wi_3': 11.77,  # init=5.00 → 2.35x，放大 2 倍多
+
+    # ----- 价位区间（init 默认 20/15/25/15/-5/-10） -----
+    'peb_wi_1': 53.62,  # init=20.00 → 2.68x，明显放大
+    'peb_wi_2': 30.65,  # init=15.00 → 2.04x，大幅放大，"抄底 L2"信号被 CMA 强化
+    'peb_wi_3': 8.50,   # init=25.00 → 0.34x，砍到 1/3
+    'peb_wi_4': 8.48,   # init=15.00 → 0.57x，砍半
+    'peb_wi_5': -12.32, # init=-5.00 → 2.46x 绝对值，加大高位 R3 减分力度
+    'peb_wi_6': -30.48, # init=-10.00 → 3.05x 绝对值，进一步强化高位 R4 减分
+
+    # ----- 突破（init 默认 10/20） -----
+    'bt_wi_1': 11.74,   # init=10.00 → 1.17x，略升
+    'bt_wi_2': 88.57,   # init=20.00 → 4.43x，**接近约束上限**，突破确认信号极重要
+
+    # ----- 优选联盟（init 默认 10） -----
+    'pa_wi_1': 0.17,    # init=10.00 → 0.02x，**顶到约束下限**，CMA 强烈认为应关闭
+
+    # ----- 短线金叉（2026-06 新增，对应报告 J/K/L 列） -----
+    'yw_wi_1': 36.30,   # init=10.00 → 3.63x，Short_GCross_Normal（J 列）
+    'yw_wi_2': 49.85,   # init=10.00 → 4.98x，**顶到约束上限**，Short_GCross_Plus（K 列）
+    'yw_wi_3': 35.25,   # init=10.00 → 3.53x，Short_GCross_Pro（L 列）
 }
 
 def get_latest_trade_date():
@@ -54,10 +115,172 @@ def get_latest_trade_date():
 
     return max_date.strftime('%Y%m%d') if max_date != datetime.min else datetime.now().strftime('%Y%m%d')
 
-def load_stock_codes():
-    """加载股票代码、名称和细分行业信息"""
+
+def detect_remote_latest_trade_date(codes, min_samples=5, max_samples=10, lookback_days=30):
+    """
+    从给定股票代码中随机抽样，使用 akshare 检测远程最新交易日。
+    不依赖 DataUpdate_ASharesDaily 脚本，直接调用 akshare 接口。
+    """
     try:
-        df = pd.read_excel(os.path.join(CONFIG['data_root'], CONFIG['stockpool_file']))
+        import akshare as ak
+        import random as _random
+        import concurrent.futures
+        from dateutil.relativedelta import relativedelta
+    except Exception as e:
+        print(f"⚠️ 检测远程交易日失败，缺少依赖: {str(e)}")
+        return None
+
+    unique_codes = list({str(c).strip().zfill(6) for c in codes if c})
+    if not unique_codes:
+        return None
+
+    sample_count = min(len(unique_codes), max_samples)
+    sample_count = max(sample_count, min(len(unique_codes), min_samples))
+    if sample_count <= 0:
+        return None
+
+    sample_codes = _random.sample(unique_codes, sample_count)
+
+    end_candidate = datetime.now().strftime("%Y%m%d")
+    start_candidate = (datetime.now() - relativedelta(days=lookback_days)).strftime("%Y%m%d")
+
+    def _process_price_code(code):
+        num_part = ''.join(ch for ch in str(code) if ch.isdigit())
+        if not num_part:
+            return None
+        first_digit = num_part[0]
+        if first_digit == '6':
+            return f'sh{num_part}'
+        elif first_digit in ('0', '3'):
+            return f'sz{num_part}'
+        elif first_digit in ('8', '9'):
+            return f'bj{num_part}'
+        return None
+
+    latest_dates = []
+    for code in sample_codes:
+        price_symbol = _process_price_code(code)
+        if not price_symbol:
+            continue
+        try:
+            df = ak.stock_zh_a_daily(
+                symbol=price_symbol,
+                adjust="qfq",
+                start_date=start_candidate,
+                end_date=end_candidate
+            )
+            if df is None or df.empty:
+                continue
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+            elif 'trade_date' in df.columns:
+                df['date'] = pd.to_datetime(df['trade_date'])
+            else:
+                continue
+            latest_dates.append(df['date'].max())
+        except Exception:
+            continue
+
+    if not latest_dates:
+        return None
+
+    date_series = pd.to_datetime(pd.Series(latest_dates)).dt.normalize()
+    # 用 max() 而非 value_counts().idxmax()：要的是"最新"，不是"最常见"；
+    # 否则若多数抽样股票仍停在 20260618、少数更新到 20260622，会被众数带偏误判
+    return date_series.max().strftime('%Y%m%d')
+
+
+def check_and_update_daily_data(stock_codes, local_latest_date):
+    """
+    随机抽样比对远程最新交易日与本地数据日期：
+      - 若远程日期 == 本地日期：无需更新
+      - 若不一致：调用 DataUpdate_ASharesDaily.py，仅更新股票池中股票代码
+    返回 True 表示数据已就绪（无需更新或更新成功），False 表示更新失败。
+    """
+    if not stock_codes:
+        print("⚠️ 股票池为空，跳过数据更新检查")
+        return True
+
+    print("\n🔍 正在检测远程最新交易日...")
+    remote_latest = detect_remote_latest_trade_date(stock_codes)
+    if not remote_latest:
+        print("⚠️ 无法获取远程交易日，跳过数据更新检查，继续使用本地数据")
+        return True
+
+    print(f"📅 本地数据最新日期: {local_latest_date}")
+    print(f"📅 远程检测最新日期: {remote_latest}")
+
+    if remote_latest <= local_latest_date:
+        print("✅ 本地数据已是最新，无需更新")
+        return True
+
+    # 数据不一致：调用更新脚本，仅更新股票池中股票代码
+    print(f"🔄 本地数据落后于远程交易日，开始更新股票池中 {len(stock_codes)} 只股票...")
+    update_script = CONFIG['daily_update_script']
+    if not os.path.exists(update_script):
+        print(f"❌ 更新脚本不存在: {update_script}")
+        return False
+
+    # 在 01_Report 目录下生成临时股票清单 xlsx，仅包含股票池中的代码
+    try:
+        os.makedirs(CONFIG['result_folder'], exist_ok=True)
+        tmp_xlsx_name = f"_tmp_stockpool_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        tmp_xlsx_path = os.path.join(CONFIG['result_folder'], tmp_xlsx_name)
+
+        # 第一列：股票代码（6位），第二列：股票名称
+        tmp_df = pd.DataFrame({
+            '代码': [str(c).strip().zfill(6) for c in stock_codes],
+            '名称': ['未知'] * len(stock_codes)
+        })
+        tmp_df.to_excel(tmp_xlsx_path, index=False)
+        print(f"📄 已生成临时股票清单: {tmp_xlsx_path} (共 {len(stock_codes)} 只)")
+    except Exception as e:
+        print(f"❌ 生成临时股票清单失败: {str(e)}")
+        return False
+
+    try:
+        # 将更新脚本所在目录加入 sys.path，便于 import DataUpdate_ASharesDaily
+        script_dir = os.path.dirname(update_script)
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+
+        # 动态加载 DataUpdate_ASharesDaily 模块
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("DataUpdate_ASharesDaily", update_script)
+        if spec is None or spec.loader is None:
+            print(f"❌ 无法加载更新脚本: {update_script}")
+            return False
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        if not hasattr(module, "run_Dailyupdate"):
+            print("❌ 更新脚本缺少 run_Dailyupdate 入口")
+            return False
+
+        # 仅更新股票池中股票代码
+        module.run_Dailyupdate(
+            stock_list_source=tmp_xlsx_path,
+            save_dir=os.path.join(CONFIG['data_root'], CONFIG['data_folder']),
+        )
+        print("✅ 数据更新完成")
+        return True
+    except Exception as e:
+        print(f"❌ 调用数据更新脚本失败: {str(e)}")
+        return False
+    finally:
+        # 清理临时清单
+        try:
+            if os.path.exists(tmp_xlsx_path):
+                os.remove(tmp_xlsx_path)
+        except Exception:
+            pass
+
+def load_stock_codes():
+    """加载股票代码、名称和细分行业信息（使用最新的 xlsx 股票池文件）"""
+    try:
+        latest_stockpool = get_latest_stockpool_file()
+        print(f"📌 使用最新股票池文件: {latest_stockpool}")
+        df = pd.read_excel(latest_stockpool)
         # 第1列为代码，第2列为名称，第3列为细分行业
         code_col = df.columns[0]
         name_col = df.columns[1]
@@ -135,7 +358,7 @@ def generate_buy_signals(data):
     bbi_dif = data['BBI_DIF'].iloc[-20:]
     bbi_trend_5d = (bbi_dif.iloc[-5:] > 0).mean()
     bbi_trend_20d = (bbi_dif > 0).mean()
-    j_negative = 1 if latest_j < 15 else 0
+    j_negative = 1 if latest_j < 20 else 0
     p1_signal = 1 if (latest_short_fund < 20 and latest_long_fund > 80) else 0
     p2_signal = 1 if (latest_short_fund > 95 and latest_long_fund > 95 and prev_short_fund < 20 and prev_long_fund > 80) else 0
 
@@ -222,17 +445,27 @@ def generate_buy_signals(data):
 def load_low_volatility_stocks():
     """加载低波红利股票清单"""
     try:
-        file_path = os.path.join(CONFIG['result_folder'], CONFIG['low_volatility_file'])
+        file_path = os.path.join(CONFIG['lists_folder'], CONFIG['low_volatility_file'])
         df = pd.read_excel(file_path)
         return set(df.iloc[:, 0].astype(str).str.zfill(6).tolist())
     except Exception as e:
         print(f"加载低波红利清单失败: {str(e)}")
         return set()
 
+def load_union_members():
+    """加载联盟成员清单"""
+    try:
+        file_path = os.path.join(CONFIG['lists_folder'], CONFIG['union_members_file'])
+        df = pd.read_excel(file_path)
+        return set(df.iloc[:, 0].astype(str).str.zfill(6).tolist())
+    except Exception as e:
+        print(f"加载联盟成员清单失败: {str(e)}")
+        return set()
+
 def load_selected_union_members():
     """加载优选联盟成员清单"""
     try:
-        file_path = os.path.join(CONFIG['result_folder'], '优选联盟成员清单.xlsx')
+        file_path = os.path.join(CONFIG['lists_folder'], CONFIG['selected_union_members_file'])
         df = pd.read_excel(file_path)
         # 代码列名为'代码'，需补零
         return set(df.iloc[:, 0].astype(str).str.zfill(6).tolist())
@@ -272,7 +505,13 @@ def calculate_total_score(row, w=WEIGHTS):
     bt_val = row['股价创新高'] * w['bt_wi_1'] + row['突破确认'] * w['bt_wi_2']
     # pa_val
     pa_val = row['优选联盟成员'] * w['pa_wi_1']
-    return j_val + bp_val + bbi_val + peb_val + bt_val + pa_val
+    # 2026-06 新增：短线金叉三因子加权（对应报告 J/K/L 列）
+    yw_val = (
+        row['Short_GCross_Normal'] * w['yw_wi_1']
+        + row['Short_GCross_Plus'] * w['yw_wi_2']
+        + row['Short_GCross_Pro'] * w['yw_wi_3']
+    )
+    return j_val + bp_val + bbi_val + peb_val + bt_val + pa_val + yw_val
 
 def main():
     """主函数：扫描股票并生成买入信号"""
@@ -281,7 +520,18 @@ def main():
     low_volatility_stocks = load_low_volatility_stocks()
     selected_union_members = load_selected_union_members()
     latest_date = get_latest_trade_date()
-    
+
+    if stock_codes:
+        # 触发数据更新检查；无论成功/失败/无需更新，都重新读取本地 CSV
+        # 取得最新日期，避免使用更新前缓存的旧 latest_date 写入文件名
+        check_and_update_daily_data(stock_codes, latest_date)
+        new_latest_date = get_latest_trade_date()
+        if new_latest_date > latest_date:
+            print(f"📅 本地最新交易日已刷新: {latest_date} → {new_latest_date}")
+        elif new_latest_date == latest_date:
+            print(f"⚠️ 本地数据未更新到最新交易日，沿用: {latest_date}")
+        latest_date = new_latest_date
+
     # 存储结果
     results = []
     
