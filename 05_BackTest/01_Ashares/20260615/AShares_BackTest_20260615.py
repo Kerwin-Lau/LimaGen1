@@ -160,8 +160,8 @@ class BacktestConfig:
     report_dir: str = os.path.join(PROJECT_ROOT, "05_BackTest", "01_Ashares", "20260615", "Report")
 
     # ---- 回测区间（用户在脚本最上方调整） ----
-    start_date: str = "2025-01-02"   # ← 修改这里即可调整回测起始日
-    end_date: str = "2025-12-31"     # ← 修改这里即可调整回测结束日
+    start_date: str = "2026-01-02"   # ← 修改这里即可调整回测起始日
+    end_date: str = "2026-06-26"     # ← 修改这里即可调整回测结束日
 
     # ---- 资金 & 仓位 ----
     init_cash: float = 500_000.0          # 初始 50 万
@@ -202,6 +202,23 @@ class BacktestConfig:
     use_gpu: bool = bool(int(os.environ.get("VBT_USE_GPU", "0")))  # 默认关闭 GPU
     n_workers: int = max(1, min(16, (os.cpu_count() or 4) - 1))
 
+    # ---- 活跃市值多空过滤（2026-06 新增）----
+    amv_xlsx: str = os.path.join(
+        PROJECT_ROOT, "02_DataProcess", "01_Ashares",
+        "01_DaliyUpdate", "活跃市值多空区间.xlsx",
+    )
+    # 调试/对比用：True 时跳过 AMV 过滤（相当于历史行为）；
+    # 文件不存在时自动置 True 并打 warning
+    amv_disable_filter: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.amv_disable_filter and self.amv_xlsx and not os.path.exists(self.amv_xlsx):
+            print(
+                f"⚠️  活跃市值多空区间文件不存在：{self.amv_xlsx}，"
+                "已自动关闭 AMV 过滤（如需开启请检查路径）。"
+            )
+            self.amv_disable_filter = True
+
 
 # =====================================================================
 # 3. 工具函数
@@ -219,6 +236,63 @@ def load_stockpool(xlsx_path: str) -> List[str]:
 
 def ensure_dir(p: str) -> None:
     os.makedirs(p, exist_ok=True)
+
+
+def load_amv_series(
+    xlsx_path: str,
+    date_index: pd.DatetimeIndex,
+) -> Tuple[pd.Series, pd.DatetimeIndex]:
+    """
+    读取"活跃市值多空区间.xlsx"，生成与 date_index 对齐的 AMV 信号序列。
+
+    输入 xlsx 列：Start, End, Long（Long ∈ {+1, -1}）
+
+    返回：
+        amv_series: pd.Series
+            +1 = 多头区间
+            -1 = 空头区间
+             0 = 区间外 / 文件不存在（默认按"允许交易"处理）
+        flip_to_short_dates: DatetimeIndex
+            "由 +1 翻转到 -1 的首日"集合，用于触发明明在持仓中、但其它
+            卖出规则都不满足的强制清仓。
+
+    实现思路：
+        1. 对 xlsx 中每一行 [Start, End, Long]，构造一个 dict 区间赋值
+        2. 用 .reindex(date_index).fillna(0) 对齐
+        3. 翻转首日 = (amv == -1) & (amv.shift(1) == 1) 当天的 index
+    """
+    if not xlsx_path or not os.path.exists(xlsx_path):
+        # 退化：返回全 0 + 空翻转集
+        return (
+            pd.Series(0, index=date_index, dtype=np.int8),
+            pd.DatetimeIndex([]),
+        )
+
+    df = pd.read_excel(xlsx_path)
+    if df.empty or df.shape[1] < 3:
+        return (
+            pd.Series(0, index=date_index, dtype=np.int8),
+            pd.DatetimeIndex([]),
+        )
+
+    # 兼容任意列名顺序：取前 3 列重命名为 Start/End/Long
+    df = df.iloc[:, :3].copy()
+    df.columns = ["Start", "End", "Long"]
+    df["Start"] = pd.to_datetime(df["Start"])
+    df["End"] = pd.to_datetime(df["End"])
+
+    # 在 date_index 上做"区间赋值"——每条记录覆盖 [Start, End] 闭区间
+    amv = pd.Series(0, index=date_index, dtype=np.int8)
+    for _, row in df.iterrows():
+        mask = (date_index >= row["Start"]) & (date_index <= row["End"])
+        amv.loc[mask] = int(row["Long"])
+
+    # 翻转首日：今天 -1、昨天 +1
+    prev = amv.shift(1)
+    flip_mask = (amv == -1) & (prev == 1)
+    flip_to_short_dates = pd.DatetimeIndex(amv.index[flip_mask.fillna(False)])
+
+    return amv, flip_to_short_dates
 
 
 # =====================================================================
@@ -620,12 +694,26 @@ class ReportGenerator:
             f"夏普比率 {sharpe:.2f}，风险收益比尚可。",
             f"回测区间共产生 {n_trades} 笔交易，实战胜率约 {win_rate:.2f}%，"
             f"交易频率与策略定位基本匹配。",
+        ]
+
+        # 2026-06 新增：活跃市值多空过滤统计
+        if "AMV 空头翻转次数" in stats["Metric"].values:
+            amv_long = _get("AMV 多头天数", default=0)
+            amv_short = _get("AMV 空头天数", default=0)
+            amv_flip = _get("AMV 空头翻转次数", default=0)
+            lines.append(
+                f"活跃市值过滤：多头 {amv_long:.0f} 天 / 空头 {amv_short:.0f} 天，"
+                f"区间内发生 {amv_flip:.0f} 次由多头翻转到空头的首日"
+                f"（首日触发强制清仓以回避逆风）。"
+            )
+
+        lines.append(
             "总体来看，该策略在本区间内呈现" + (
                 "明显的择时/选股 alpha，建议继续跟踪。" if total_return > 5
                 else "震荡偏弱表现，建议结合宏观环境与因子权重进行二次调参。" if total_return > 0
                 else "亏损状态，需要重新评估因子或择时逻辑。"
-            ),
-        ]
+            )
+        )
         return "<br/>".join(lines)
 
     @staticmethod
@@ -777,6 +865,9 @@ class BacktestEngine:
         self.feature_cache: Dict[str, pd.DataFrame] = {}  # symbol -> 特征 DataFrame（含信号、得分等列）
         self.signal_df: Optional[pd.DataFrame] = None
         self.score_df: Optional[pd.DataFrame] = None
+        # 2026-06：活跃市值 AMV 信号（在 run() 内的 _load_amv_signal 中赋值）
+        self.amv_series: Optional[pd.Series] = None
+        self.amv_flip_to_short: Optional[pd.DatetimeIndex] = None
         self.portfolio = None
         self.trades: Optional[pd.DataFrame] = None
         self.stats: Optional[pd.DataFrame] = None
@@ -866,6 +957,24 @@ class BacktestEngine:
         # 命名约定: self.feature_wide[feature_name] = DataFrame(date × symbol)
         self.feature_wide = self._build_feature_wide(feats_panel, all_idx)
         self._compute_scores_with_current_weights()
+
+    def _load_amv_signal(self) -> None:
+        """
+        加载活跃市值多空信号，结果缓存到 self.amv_series / self.amv_flip_to_short。
+
+        行为约定：
+            * amv_disable_filter = True   → 构造全 1 的 series（"全程允许交易"）
+            * xlsx 不存在                → 同上 + 控制台 warning（由 cfg.__post_init__ 兜底）
+            * xlsx 存在                  → 按 record 区间赋 +1/-1，其余 0
+        """
+        idx = self.signal_df.index if self.signal_df is not None else pd.DatetimeIndex([])
+        if self.cfg.amv_disable_filter:
+            self.amv_series = pd.Series(1, index=idx, dtype=np.int8)
+            self.amv_flip_to_short = pd.DatetimeIndex([])
+            return
+        self.amv_series, self.amv_flip_to_short = load_amv_series(
+            self.cfg.amv_xlsx, idx
+        )
 
     def _build_feature_wide(
         self,
@@ -1043,10 +1152,19 @@ class BacktestEngine:
 
         # 滞后 1 天：T 日买入用的是 T-1 的得分
         lagged_score = score_panel.shift(1)
-        # 当天确实有买入信号 + 得分过阈的股票才纳入候选
-        buy_active = (self.signal_df == 1) & (score_panel >= self.cfg.score_threshold)
+        # 当天确实有买入信号 + 得分过阈 + 活跃市值多头 的股票才纳入候选
+        amv_long_mask = (self.amv_series.reindex(self.signal_df.index).fillna(0) == 1).values.reshape(-1, 1)
+        buy_active = (
+            (self.signal_df == 1)
+            & (score_panel >= self.cfg.score_threshold)
+            & amv_long_mask
+        )
         # 用 T-1 得分对当日有 buy_active 的股票排名
-        rank_today = lagged_score.where(buy_active, -np.inf).rank(
+        # 注意：把被屏蔽的位置填 NaN 而不是 -np.inf。
+        # pd.rank 对一行全 -inf 仍会按位置给出 1.0/2.0/...，导致空头日
+        # 绕过 amv_long_mask 错误产生买入信号；NaN 在 rank 后保持 NaN，
+        # 后续 (rank > 0) 在屏蔽位置才返回 False。
+        rank_today = lagged_score.where(buy_active, np.nan).rank(
             axis=1, ascending=False, method="first"
         )
         # 默认：候选 = 任何满足阈值但 rank 尚未定（先放宽松）
@@ -1184,10 +1302,20 @@ class BacktestEngine:
 
         close_vals = close_df.reindex(columns=cols).values
 
+        # 把"AMV 由 1 翻转到 -1 的首日"提前转成 set，O(1) 查询
+        amv_flip_set = (
+            set(self.amv_flip_to_short) if self.amv_flip_to_short is not None else set()
+        )
+
         for i in range(n_days):
             buy_candidate = raw[i].astype(bool)
 
             # ===== 1) 卖出规则（在已知 in_pos 状态下判断） =====
+            # 2026-06 新增：活跃市值由 +1 翻转到 -1 的首日 → 持仓全卖
+            amv_force_exit_today = np.zeros(n_syms, dtype=bool)
+            if raw_entries.index[i] in amv_flip_set:
+                amv_force_exit_today = in_pos.copy()
+
             if min_hold > 0 and i > 0:
                 hold_days = i - entry_idx
                 gain = np.where(
@@ -1213,9 +1341,10 @@ class BacktestEngine:
                     cond_high_vol[s] = (vol_vals[i, s] >= past_max) and (past_max > 0)
                 cond_rule4 = in_pos & (gain > gain_10) & cond_red & cond_high_vol
 
-                exits[i] = (cond_rule1 | cond_rule3 | cond_rule4).astype(np.int8)
+                exits[i] = (cond_rule1 | cond_rule3 | cond_rule4 | amv_force_exit_today).astype(np.int8)
             else:
-                exits[i] = 0
+                # i == 0 时无 min_hold 判断可走，但仍可能有 AMV 翻转日 force-exit
+                exits[i] = amv_force_exit_today.astype(np.int8)
 
             # ===== 2) 处理今天的 buy =====
             in_pos_today = in_pos & (exits[i] == 0)
@@ -1418,6 +1547,18 @@ class BacktestEngine:
         # 2) 信号 & 评分
         self.compute_signals([s for s in symbols if s in self.close_df.columns])
 
+        # 2.5) 加载活跃市值多空过滤信号
+        self._load_amv_signal()
+        n_long = int((self.amv_series == 1).sum()) if self.amv_series is not None else 0
+        n_short = int((self.amv_series == -1).sum()) if self.amv_series is not None else 0
+        n_flip = len(self.amv_flip_to_short) if self.amv_flip_to_short is not None else 0
+        if self.cfg.amv_disable_filter:
+            print(f"✅ 活跃市值过滤：已禁用（amv_disable_filter=True）")
+        else:
+            print(
+                f"✅ 活跃市值: 多头 {n_long} 天 / 空头 {n_short} 天 / 空头翻转 {n_flip} 次"
+            )
+
         # 3) entries / exits
         entries, exits = self.build_target_signals()
         print(f"✅ 买入信号总触发数: {entries.values.sum()}")
@@ -1472,6 +1613,24 @@ class BacktestEngine:
         self.stats = self.portfolio.stats(agg_func=None).reset_index()
         self.stats.columns = ["Metric", "Value"]
         self.equity = self.portfolio.value()
+
+        # 2026-06 新增：把 AMV 多空统计挂到 stats 末尾，
+        # 供 PDF 中文摘要 / Excel 关键指标使用
+        if self.amv_series is not None:
+            n_long = int((self.amv_series == 1).sum())
+            n_short = int((self.amv_series == -1).sum())
+            n_flip = len(self.amv_flip_to_short) if self.amv_flip_to_short is not None else 0
+            self.stats = pd.concat([
+                self.stats,
+                pd.DataFrame({
+                    "Metric": [
+                        "AMV 多头天数",
+                        "AMV 空头天数",
+                        "AMV 空头翻转次数",
+                    ],
+                    "Value": [n_long, n_short, n_flip],
+                }),
+            ], ignore_index=True)
 
         return self
 
@@ -1724,6 +1883,8 @@ class BacktestEnv:
     def step(self, weights_vec: np.ndarray) -> Tuple[np.ndarray, float, bool, Dict[str, Any]]:
         self.engine.strategy.weights.set_weights(weights_vec)
         self.engine._compute_scores_with_current_weights()
+        # RL 训练时也要保留 AMV 过滤（与回测环境保持一致）
+        self.engine._load_amv_signal()
         self.engine.run()
         # reward = 总收益率 - 1.0 * 最大回撤（可调）
         total_return = float(self.engine.portfolio.total_return())
