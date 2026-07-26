@@ -20,8 +20,8 @@ RL_Alpha_AShares.py
                │
     ┌──────────▼──────────────────────────────┐
     │  WeightEnv.evaluate(weights_vec)        │  ← 包装 AShares_BackTest
-    │  - 训练: 中证A500 抽 100 只              │
-    │  - 验证: 中证A500 全 500 只               │
+    │  - 训练: 中证A2000 抽 1200 只            │
+    │  - 验证: 中证A2000 全 1947 只            │
     │  - reward: 终值 End Value                  │
     └─────────────────────────────────────────┘
 
@@ -32,12 +32,12 @@ RL_Alpha_AShares.py
         ↓ importlib
     Z-Strategy.py (ZWeights)
 
-训练 / 验证 / 测试时间窗（用户指定）：
-    train: 2025/06/25 ~ 2025/09/03
-    val:   2025/12/09 ~ 2026/01/28
-    test:  2026/04/08 ~ 2026/05/25
+训练 / 验证 / 测试时间窗（用户 2026-06-30 指定，v7）：
+    train: 2025/01/02 ~ 2025/06/30
+    val:   2025/07/01 ~ 2025/12/31
+    test:  2026/01/02 ~ 2026/06/26
 
-股票池：05_BackTest/01_Ashares/01_List/中证A500.xlsx
+股票池：05_BackTest/01_Ashares/01_List/A700.xlsx（共 700 只，训练抽 600，验证用全量）
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ PROJECT_ROOT = r"D:\Quant\01_SwProj\04_VectorBT\02_Lima\Lima_Gen1"
 BACKTEST_DIR = os.path.join(PROJECT_ROOT, "05_BackTest", "01_Ashares", "20260615")
 Z_STRATEGY_DIR = os.path.join(PROJECT_ROOT, "04_Strategy", "01_Ashares")
 STOCKPOOL_XLSX = os.path.join(
-    PROJECT_ROOT, "05_BackTest", "01_Ashares", "01_List", "中证A500.xlsx"
+    PROJECT_ROOT, "05_BackTest", "01_Ashares", "01_List", "A700.xlsx"
 )
 
 # 输出目录
@@ -86,7 +86,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(os.path.join(OUTPUT_DIR, "train_v5.log"), encoding="utf-8"),
+        logging.FileHandler(os.path.join(OUTPUT_DIR, "train_v7.log"), encoding="utf-8"),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -100,25 +100,24 @@ log = logging.getLogger("RL_Alpha")
 class TrainConfig:
     """训练配置。所有可调参数集中在这里，方便 RL 调优。"""
 
-    # 时间窗（用户指定）
-    # v5 训练窗口（用户 2026-06 指定）
-    train_start: str = "2025-03-01"
+    # 时间窗（用户 2026-06-28 指定，v6）
+    train_start: str = "2025-01-02"
     train_end:   str = "2025-06-30"
     val_start:   str = "2025-07-01"
-    val_end:     str = "2025-10-30"
-    test_start:  str = "2026-02-01"
-    test_end:    str = "2026-06-30"
+    val_end:     str = "2025-12-31"
+    test_start:  str = "2026-01-02"
+    test_end:    str = "2026-06-26"
 
-    # 股票池与抽样
+    # 股票池与抽样（v7：A700 共 700 只）
     stockpool_xlsx: str = STOCKPOOL_XLSX
-    train_n_stocks: int = 100    # 训练时从中证A500 抽 100 只
-    val_n_stocks:   int = 500    # 验证用全部 500 只
+    train_n_stocks: int = 600   # v7：从 A700 抽 600 只训练
+    val_n_stocks:   int = 700   # v7：验证用 A700 全量 700 只
     train_seed: int = 42         # 抽样随机种子（保证可复现）
 
     # CMA-ES 超参
     cma_sigma:    float = 1.0     # 初始搜索步长（归一化空间 [0,1] 上的标准差；v5 搜索空间放宽后调到 1.0）
     cma_popsize:  int   = 16      # 每代个体数
-    cma_max_gen:  int   = 30      # 最大迭代代数
+    cma_max_gen:  int   = 50      # v7 最大迭代代数（用户 2026-06-30 从 30 提至 50）
     cma_seed:     int   = 0
 
     # 权重约束：init_value * [0.01, 10.0]  ← v5 放宽（用户 2026-06）
@@ -128,11 +127,11 @@ class TrainConfig:
     # 资源
     n_workers: int = 8            # 多进程并行评估 worker 数
 
-    # v5 产物路径（加 _v5 后缀，保留 v3 best_weights.json 作为对比基线）
+    # v7 产物路径（加 _v7 后缀，保留 v5/v6 best_weights.json 作为对比基线）
     output_dir: str = OUTPUT_DIR
-    checkpoint_path:    str = os.path.join(OUTPUT_DIR, "cma_checkpoint_v5.npz")
-    best_weights_path:  str = os.path.join(OUTPUT_DIR, "best_weights_v5.json")
-    history_path:       str = os.path.join(OUTPUT_DIR, "history_v5.json")
+    checkpoint_path:    str = os.path.join(OUTPUT_DIR, "cma_checkpoint_v7.npz")
+    best_weights_path:  str = os.path.join(OUTPUT_DIR, "best_weights_v7.json")
+    history_path:       str = os.path.join(OUTPUT_DIR, "history_v7.json")
 
 
 # ============================================================================
@@ -149,7 +148,7 @@ def load_stockpool_codes(xlsx_path: str) -> List[str]:
 
 
 def sample_train_codes(all_codes: List[str], n: int, seed: int) -> List[str]:
-    """从中证 A500 抽 n 只股票作为训练子集。固定 seed 保证可复现。"""
+    """从中证 A2000 抽 n 只股票作为训练子集。固定 seed 保证可复现。"""
     if n >= len(all_codes):
         return list(all_codes)
     rng = random.Random(seed)
@@ -202,6 +201,9 @@ def evaluate_single_backtest(
         engine.compute_signals(codes)
         # 注入权重后必须重算评分（compute_signals 用的是默认权重）
         engine._compute_scores_with_current_weights()
+        # RL 脚本跳过了 BacktestEngine.run()，必须手动调用以填充 amv_series
+        # （否则 build_target_signals 内 amv_long_mask 会因 amv_series=None 报错）
+        engine._load_amv_signal()
         entries, exits = engine.build_target_signals()
         size_pct = engine._build_size_matrix(entries, exits)
 
@@ -573,11 +575,11 @@ def evaluate_test(best_weights: np.ndarray, cfg: TrainConfig) -> float:
 # ============================================================================
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Z 策略权重 CMA-ES 优化")
-    parser.add_argument("--gens", type=int, default=30, help="CMA-ES 最大代数")
+    parser.add_argument("--gens", type=int, default=50, help="CMA-ES 最大代数（v7 默认 50）")
     parser.add_argument("--popsize", type=int, default=16, help="每代个体数")
     parser.add_argument("--sigma", type=float, default=0.5, help="初始搜索步长")
     parser.add_argument("--workers", type=int, default=8, help="并行 worker 数")
-    parser.add_argument("--train_n", type=int, default=100, help="训练用股票数")
+    parser.add_argument("--train_n", type=int, default=600, help="训练用股票数（v7 默认 600）")
     parser.add_argument("--seed", type=int, default=42, help="抽样随机种子")
     parser.add_argument(
         "--smoke", action="store_true",

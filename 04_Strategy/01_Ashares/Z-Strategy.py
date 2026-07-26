@@ -103,14 +103,16 @@ class ZWeights:
         v1 (18 维, init×[0.5, 2.0]) : 训练 603,932 / 验证 644,659 / 测试 604,499
         v2 (21 维, init×[0.5, 2.0]) : 训练 613,393 / 验证 629,862 / 测试 561,591
         v3 (21 维, init×[0.01, 5.0]): 训练 616,192 / 验证 641,226 / 测试 661,844
-        v5 (22 维, init×[0.01, 10.0]): 训练 526,879 / 验证 **813,814** / 测试 610,555  ← 当前采用
-        总耗时 : 43.9 分钟（8 worker 并行）
+        v5 (22 维, init×[0.01, 10.0]): 训练 526,879 / 验证 **813,814** / 测试 610,555
+        v7 (22 维, init×[0.01, 10.0]): 训练 578,080 / 验证 664,087 / 测试 647,406  ← 当前采用
+        总耗时 : 43.9 分钟（v5）/ 236.5 分钟（v7，50 代 × 16 种群 × 8 worker）
 
     维度变化历史：
         v1 : 18 维（j/bp/bbi/peb/bt/pa）
         v2 : 21 维（+yw_wi_1/2/3 短线金叉）
         v4 : 22 维（-pa_wi_1, +amvl_wi/amvs_wi 活跃市值多空信号）
         v5 : 22 维（沿用 v4 维度，跑更大搜索范围 + 更长训练窗口）
+        v7 : 22 维（沿用 v5 维度，股票池换 A700.xlsx 共 700 只，训练抽 600，50 代 CMA-ES）
 
     ⚠️ v5 与 v3 的对比
         v5 验证集 813k 创历史最高（+62.8% 相对 v3），但测试集 610k 略低于 v3 661k。
@@ -128,48 +130,48 @@ class ZWeights:
     ----------------------------------------------------------------------
     """
 
-    # ----- J 值相关 -----
-    j_wi_1: float = 58.26   # J 到负值（init=45.00 → 1.29x，略升）
-    j_wi_2: float = 201.55  # J 值（init=23.90 → 8.43x，**接近搜索上限**）
-    j_wi_3: float = 134.23  # J 反转（init=25.28 → 5.31x，大幅放大）
+    # ----- J 值相关 -----  # v7 (2026-06-30, A700 池, 50 代 CMA-ES)
+    j_wi_1: float = 325.1114342108119   # J 到负值
+    j_wi_2: float = 870.1682019165263   # J 值
+    j_wi_3: float = 1005.7895863923729  # J 反转
 
     # ----- 资金补票 -----
-    bp_wi_1: float = 8.20    # 补票 P1（init=17.49 → 0.47x，砍半）
-    bp_wi_2: float = 325.33  # 补票 P2（init=60.27 → 5.40x，**接近搜索上限**）
-    bp_wi_3: float = 20.01   # 长线资金（init=3.13 → 6.39x，大幅放大）
+    bp_wi_1: float = 81.2244874395477   # 补票 P1
+    bp_wi_2: float = 806.9671024599863  # 补票 P2
+    bp_wi_3: float = 199.38159337482884 # 长线资金
 
     # ----- BBI 趋势 -----
-    bbi_wi_1: float = 208.73  # BBI 线上（init=30.75 → 6.79x，大幅放大）
-    bbi_wi_2: float = 0.58    # BBI 5 日趋势（init=35.20 → 0.02x，**顶到搜索下限，应关闭**）
-    bbi_wi_3: float = 30.35   # BBI 20 日趋势（init=11.77 → 2.58x，放大近 3 倍）
+    bbi_wi_1: float = 2075.264610767131  # BBI 线上
+    bbi_wi_2: float = 1.3662900979272943 # BBI 5 日趋势
+    bbi_wi_3: float = 166.25515453198335 # BBI 20 日趋势
 
     # ----- 价位区间 -----
-    peb_wi_1: float = 25.16   # 跌穿 L1（init=53.62 → 0.47x，砍半）
-    peb_wi_2: float = 90.78   # 触碰 L2（init=30.65 → 2.96x，放大 3 倍）
-    peb_wi_3: float = 50.29   # 位于 R1（init=8.50 → 5.92x，大幅放大）
-    peb_wi_4: float = 0.12    # 位于 R2（init=8.48 → 0.01x，**顶到搜索下限，应关闭**）
-    peb_wi_5: float = -122.42 # 位于 R3（init=-12.32 → 9.94x 绝对值，**顶到搜索上限**）
-    peb_wi_6: float = -302.58 # 位于 R4（init=-30.48 → 9.93x 绝对值，**顶到搜索上限**）
+    peb_wi_1: float = 237.48255939190648   # 跌穿 L1
+    peb_wi_2: float = 264.173169107157     # 触碰 L2
+    peb_wi_3: float = 112.15479322260738   # 位于 R1
+    peb_wi_4: float = 0.41504591286507847  # 位于 R2
+    peb_wi_5: float = -295.5278463275016   # 位于 R3
+    peb_wi_6: float = -148.2217123227859   # 位于 R4
 
     # ----- 突破 -----
-    bt_wi_1: float = 61.06   # 创新高（init=11.74 → 5.20x，大幅放大）
-    bt_wi_2: float = 442.46  # 突破确认（init=88.57 → 5.00x，**顶到 v3 搜索上限**）
+    bt_wi_1: float = 326.9037003007835  # 创新高
+    bt_wi_2: float = 123.07233174811982 # 突破确认
 
     # 注意：原"优选联盟" pa_wi_1 已删除（2026-06 用户需求）
-    #       CMA-ES v3 / v5 训练结果均认为该因子贡献为 0，应直接关掉
+    #       CMA-ES v3 / v5 / v7 训练结果均认为该因子贡献为 0，应直接关掉
     # ----- 短线金叉（2026-06 用户新增需求，对应 SignalScan 报告的 J/K/L 列）-----
-    # 三项默认 = CMA-ES v5 最优值
-    yw_wi_1: float = 192.25  # Short_GCross_Normal（init=36.30 → 5.30x，大幅放大，J 列）
-    yw_wi_2: float = 302.98  # Short_GCross_Plus（init=49.85 → 6.08x，大幅放大，K 列）
-    yw_wi_3: float = 186.11  # Short_GCross_Pro（init=35.25 → 5.28x，大幅放大，L 列）
+    # 三项默认 = CMA-ES v7 最优值（2026-06-30, A700 池, 50 代）
+    yw_wi_1: float = 1103.3995222620968  # Short_GCross_Normal（J 列）
+    yw_wi_2: float = 859.2481068679789   # Short_GCross_Plus（K 列）
+    yw_wi_3: float = 1373.6178280834506  # Short_GCross_Pro（L 列）
 
     # ----- 活跃市值 AMV（2026-06 用户新增需求，对应日线 CSV 的 AMV 列）-----
     # AMV = +1 表示活跃市值处于多头区间；AMV = -1 表示空头区间；0/缺失表示中性
     # 公式（在 compute_score 中实现）：
     #     amv_val = +amvl_wi * (AMV == 1) - amvs_wi * (AMV == -1)
     # 即：多头时加分（+amvl_wi），空头时减分（-amvs_wi），中性/缺失时 0
-    amvl_wi: float = 24.16   # AMV 多头加分权重（init=20.00 → 1.21x，几乎不变）
-    amvs_wi: float = 2.58    # AMV 空头减分权重（init=20.00 → 0.13x，**CMA-ES 认为这个信号贡献极小，可考虑关掉**）
+    amvl_wi: float = 236.7941019398931  # AMV 多头加分权重（CMA-ES v7 最优值）
+    amvs_wi: float = 5.572800399356611  # AMV 空头减分权重（CMA-ES v7 最优值）
 
     def set_weights(self, vec: Iterable[float]) -> None:
         # 强化学习 agent 注入新权重的入口，顺序需与 to_array 一致
@@ -261,6 +263,10 @@ class ZStrategy(StrategyBase):
             'short_gcross_plus': 0,
             'short_gcross_pro': 0,
             'long_term_fund': 0.0,
+            # 2026-06-30 新增：综合得分清零门的两个数据开关。
+            # 缺省按"不触发清零"处理（=1 / =0），保证旧调用方行为不变。
+            'weekly_yw_long': 1,
+            'bearish_volume_spike_10d': 0,
         }
         if data is None or len(data) < 20:
             return empty
@@ -425,6 +431,31 @@ class ZStrategy(StrategyBase):
         except Exception:
             is_new_high = 0
 
+        # -------- 2026-06-30 新增：综合得分清零门 --------
+        # 1) Weekly_yw_long（CSV AN 列）：T 日 = 0 → 清零
+        try:
+            if 'Weekly_yw_long' in data.columns and not pd.isna(data['Weekly_yw_long'].iloc[-1]):
+                weekly_yw_long = int(data['Weekly_yw_long'].iloc[-1])
+            else:
+                weekly_yw_long = 1
+        except Exception:
+            weekly_yw_long = 1
+
+        # 2) bearish_volume_spike_10d：T 往前 10 个交易日内
+        #    是否存在"阴线 且 成交量 >= 这 10 日成交量中位数 × 1.5"
+        try:
+            bearish_volume_spike_10d = 0
+            if len(data) >= 11:
+                window = data.iloc[-11:-1]  # 严格 T-1..T-10 共 10 个交易日，不含 T
+                med = float(window['volume'].median())
+                if med > 0:
+                    bearish = window['close'] < window['open']
+                    high_vol = window['volume'] >= 1.5 * med
+                    if bool((bearish & high_vol).any()):
+                        bearish_volume_spike_10d = 1
+        except Exception:
+            bearish_volume_spike_10d = 0
+
         return {
             'j_negative': j_negative,
             'j_value': round(latest_j, 2),
@@ -445,6 +476,8 @@ class ZStrategy(StrategyBase):
             'short_gcross_plus': short_gcross_plus,
             'short_gcross_pro': short_gcross_pro,
             'long_term_fund': round(latest_long_fund, 2),
+            'weekly_yw_long': weekly_yw_long,
+            'bearish_volume_spike_10d': bearish_volume_spike_10d,
         }
 
     # ---- 评分 ----
@@ -495,7 +528,15 @@ class ZStrategy(StrategyBase):
         # row.get('AMV', 0) 防御性写法：日线 CSV 当前没 AMV 列时自动当 0
         amv = row.get('AMV', 0)
         amv_val = w.amvl_wi * int(amv == 1) - w.amvs_wi * int(amv == -1)
-        return float(j_val + bp_val + bbi_val + peb_val + bt_val + yw_val + amv_val)
+        raw_score = float(j_val + bp_val + bbi_val + peb_val + bt_val + yw_val + amv_val)
+
+        # 2026-06-30 新增：综合得分清零门
+        # 触发任一条件 → raw_score 直接清零，rank 阶段也会被自然过滤掉
+        if int(row.get('Weekly_yw_long', row.get('weekly_yw_long', 1))) == 0:
+            return 0.0
+        if int(row.get('bearish_volume_spike_10d', 0)) == 1:
+            return 0.0
+        return raw_score
 
     # ---- 卖出信号（仅在回测中使用） ----
     def generate_sell_signals(

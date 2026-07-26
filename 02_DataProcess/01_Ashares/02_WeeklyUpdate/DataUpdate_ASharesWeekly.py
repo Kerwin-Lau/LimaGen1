@@ -48,6 +48,12 @@ WEEKLY_REPORT_DIR = (
 # ================================================================
 
 
+# 周线计算的固定起始日期
+# - 与日线脚本 DataUpdate_ASharesDaily.py 的 HISTORY_START_DATE 保持一致(2020-01-02)
+# - 避免"end_date - 3 年"动态计算导致窗口在多次运行间漂移或截断 2020 年以来的历史数据
+HISTORY_START_DATE = "20200102"
+
+
 class StockDataUpdater:
     """周线数据更新器（基于本地日线 csv）"""
 
@@ -350,10 +356,18 @@ class StockDataUpdater:
             if end_date is not None:
                 merged_df['last_trade_date'] = pd.to_datetime(end_date)
 
+            # yw_long: Short_Trend > Short_LS 置 1,其余情况置 0
+            # 必须在 output_columns 组装之前计算,否则该列在 csv 输出时被丢弃。
+            # NaN 比较结果为 False → 置 0,与需求"其余情况置 0"一致。
+            if {'Short_Trend', 'Short_LS'}.issubset(merged_df.columns):
+                merged_df['yw_long'] = np.where(
+                    merged_df['Short_Trend'] > merged_df['Short_LS'], 1, 0
+                ).astype(np.int64)
+
             base_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount', 'outstanding_share',
                          'turnover', 'last_trade_date']
             ta_cols = ['K', 'D', 'J', 'BBI', 'BBI_DIF', 'DIF', 'DEA', 'MACD', 'short_term_fund', 'long_term_fund',
-                       'Short_LS', 'Short_Trend']
+                       'Short_LS', 'Short_Trend', 'yw_long']
             value_cols = ['market_cap', 'float_market_cap', 'pe_ttm', 'pe_static', 'pb', 'peg', 'pcf', 'ps']
 
             all_columns = base_cols + ta_cols + value_cols
@@ -838,9 +852,9 @@ class StockDataUpdater:
         else:
             end_date = datetime.now().strftime("%Y%m%d")
 
-        start_date = (datetime.strptime(end_date, "%Y%m%d") - relativedelta(years=3)).strftime("%Y%m%d")
+        start_date = HISTORY_START_DATE
         print(f"📅 最新交易日: {end_date}")
-        print(f"📅 数据日期范围: {start_date} - {end_date}")
+        print(f"📅 数据日期范围: {start_date} - {end_date} (start_date 固定为 HISTORY_START_DATE)")
 
         # ============ 步骤 2: 校验 Daliy 数据最新日期 ============
         try:

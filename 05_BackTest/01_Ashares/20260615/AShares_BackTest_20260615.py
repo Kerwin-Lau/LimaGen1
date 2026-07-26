@@ -156,19 +156,38 @@ class BacktestConfig:
     """
     # ---- 路径 ----
     raw_data_dir: str = os.path.join(PROJECT_ROOT, "01_Database", "01_Ashares", "01_RawData-Daily")
-    stockpool_xlsx: str = os.path.join(PROJECT_ROOT, "05_BackTest", "01_Ashares", "01_List", "中证A500.xlsx")
+    stockpool_xlsx: str = os.path.join(PROJECT_ROOT, "05_BackTest", "01_Ashares", "01_List", "A700.xlsx")
     report_dir: str = os.path.join(PROJECT_ROOT, "05_BackTest", "01_Ashares", "20260615", "Report")
 
     # ---- 回测区间（用户在脚本最上方调整） ----
-    start_date: str = "2026-01-02"   # ← 修改这里即可调整回测起始日
-    end_date: str = "2026-06-26"     # ← 修改这里即可调整回测结束日
+    start_date: str = "2025-01-02"   # ← 修改这里即可调整回测起始日
+    end_date: str = "2025-12-31"     # ← 修改这里即可调整回测结束日
 
     # ---- 资金 & 仓位 ----
     init_cash: float = 500_000.0          # 初始 50 万
-    max_positions: int = 5                # 最多 5 个仓位
+    max_positions: int = 6                # 最多 6 个仓位（2026-06-30 调整 5→6，让 4-5 仓成为可能）
     target_weight_low: float = 0.20       # 单仓位目标占比下限
     target_weight_high: float = 0.30      # 单仓位目标占比上限
-    init_weight: float = 0.20             # 初始 5 个仓位，每个 20%
+    init_weight: float = 0.20             # legacy 字段（保留以兼容历史 config）；
+                                          # 实际仓位分配见 _build_size_matrix 的 equal-split 逻辑：
+                                          # per = min(high, 1.0 / n_buys_today)
+
+    # ---- 现金档位→仓位 N 映射（2026-06-30 新增参数化）----
+    # 语义：th[i] = 启用 (i+1) 仓所需的最低 cash_ratio
+    #   cash < th[0]   → 0 仓
+    #   th[0] ≤ cash < th[1] → 1 仓
+    #   th[1] ≤ cash < th[2] → 2 仓
+    #   ...
+    #   cash ≥ th[-1]  → len(th) 仓
+    # 默认档位（满足用户诉求：2026-01-06 实际现金比 34.6% 应允许 4 仓）：
+    #   cash < 10% → 0；10~20% → 1；20~30% → 2；30~34% → 3；34~100% → 4
+    # 上限：n_pos = min(档位, max_positions)
+    pos_count_cash_thresholds: tuple = (0.10, 0.20, 0.30, 0.34)
+
+    # ---- 13 日空仓诊断开关（2026-06-30 新增；默认关闭）----
+    # True 时在 build_target_signals 中打印候选/截断/n_pos 详情
+    debug_gap: bool = False
+    debug_gap_dates: tuple = ()  # 留空则打印全部；否则只打印该日附近的窗口
 
     # ---- 交易成本 ----
     fees: float = 0.0005        # 手续费 万分之五
@@ -1050,6 +1069,14 @@ class BacktestEngine:
             + (amv == 1) * w.amvl_wi
             - (amv == -1) * w.amvs_wi
         )
+
+        # 2026-06-30 新增：综合得分清零门
+        # 触发任一条件 → 该 (date, symbol) 单元格得分置 0，与 Z-Strategy.compute_score 保持一致
+        weekly_yw_long = _col("weekly_yw_long")
+        bearish_vol_spike = _col("bearish_volume_spike_10d")
+        gate_clear = (weekly_yw_long == 0) | (bearish_vol_spike == 1)
+        score = score.where(~gate_clear, 0.0)
+
         self.score_df = score
 
     def _daily_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -1117,6 +1144,22 @@ class BacktestEngine:
         # 等数据管线补上 AMV 列后，这里直接读 df["AMV"] 即可。
         out["AMV"] = 0
 
+        # 2026-06-30 新增：综合得分清零门
+        # 1) weekly_yw_long：CSV 的 AN 列，缺列/缺失值按 1 处理（不触发清零）
+        if "Weekly_yw_long" in df.columns:
+            out["weekly_yw_long"] = df["Weekly_yw_long"].fillna(1).astype(int)
+        else:
+            out["weekly_yw_long"] = 1
+        # 2) bearish_volume_spike_10d：T 往前 10 个交易日内是否存在
+        #    "阴线 且 成交量 >= 这 10 日成交量中位数 × 1.5"
+        #    window=shift(1).rolling(10) 严格不含 T 当日
+        vol_med_10 = df["volume"].shift(1).rolling(10).median()
+        bearish_10 = (df["close"] < df["open"]).shift(1).rolling(10).max()
+        high_vol_10 = (df["volume"] >= 1.5 * vol_med_10).shift(1).rolling(10).max()
+        out["bearish_volume_spike_10d"] = (
+            (bearish_10.fillna(0).astype(int) & high_vol_10.fillna(0).astype(int))
+        )
+
         # ---- 买入信号（任一为真即触发） ----
         buy = (
             out["J到负值-日线"]
@@ -1170,72 +1213,254 @@ class BacktestEngine:
         # 默认：候选 = 任何满足阈值但 rank 尚未定（先放宽松）
         raw_entries = (rank_today > 0).astype(int)
 
-        # ---- 计算当日可用仓位数 N_i（现金档位） ----
-        n_pos_today = self._compute_n_positions_per_day(raw_entries)
+        # ---- 计算当日可用仓位数 N_i（两遍扫描：用真实现金反推） ----
+        # 2026-06-30 修复：Pass 1 不再用 raw_entries_unbounded（一旦候选数 >> 实际能开的
+        #   上限，_simulate_account_state 会把每只候选按 30% size 买入，total_invested
+        #   指数级爆炸，cash 变成天文负数）。
+        #   改为：用一个保守的固定上限 pass1_cap = len(thresholds)+1（即最大可能档位），
+        #   让 Pass 1 模拟"在合理上限内"会花多少钱。这样 Pass 2 拿到的 cash/total 才稳定。
+        pass1_cap = len(self.cfg.pos_count_cash_thresholds) + 1
+        capped_pass1 = (rank_today > 0) & (rank_today <= pass1_cap)
+        raw_entries_unbounded_p1 = capped_pass1.astype(int)
+
+        # Pass 1
+        entries_p1, exits_p1 = self._build_entries_exits_unified(raw_entries_unbounded_p1)
+        cash_series, held_series, total_value_series = self._simulate_account_state(entries_p1, exits_p1)
+
+        # 2026-06-30 修复：_simulate_account_state 是近似模拟（用 entry_value 累加估算 held_value），
+        # 真实回测中 vbt 会按 cash_sharing 自动约束，且用 close 而不是 entry_value×price/entry_price。
+        # 当 held_value 估算显著高于 init_cash（多见于 entry_value 多次叠加且价格上涨），
+        # cr 会被人为压低，导致 Pass 2 给出过低的 n_pos。
+        # 修法：把 total_value_series 限制在 init_cash × 1.5 上界（最多 50% 累计收益的合理范围），
+        # 避免 Pass 2 拿到虚高的 total 后算 cr 偏小，n_pos 永远 0。
+        max_tv = float(self.cfg.init_cash) * 1.5
+        total_value_series = total_value_series.clip(upper=max_tv)
+
+        # Pass 2
+        n_pos_today = self._compute_n_positions_per_day(
+            raw_entries_unbounded_p1,
+            cash_series=cash_series,
+            total_value_series=total_value_series,
+        )
         # 把 raw_entries 截断到每天前 N_i 名
         capped_entries = (rank_today > 0) & (rank_today <= n_pos_today.values.reshape(-1, 1))
         raw_entries = capped_entries.astype(int)
+
+        # ---- 2026-06-30 诊断打印：13 日空仓期间的真实状态 ----
+        if self.cfg.debug_gap:
+            valid_cols = list(self.signal_df.columns)
+            raw_full = (rank_today > 0).astype(int)
+            for i, dt in enumerate(self.signal_df.index):
+                if self.cfg.debug_gap_dates and dt not in pd.DatetimeIndex(self.cfg.debug_gap_dates):
+                    continue
+                n_raw = int(raw_full.iloc[i].sum())
+                n_capped = int(raw_entries.iloc[i].sum())
+                n_target = int(n_pos_today.iloc[i])
+                cs = float(cash_series.iloc[i])
+                tv = float(total_value_series.iloc[i])
+                cr = cs / tv if tv > 0 else 0.0
+                # 候选股代码
+                cand = [c for c in valid_cols if int(raw_full.iloc[i][c]) == 1][:8]
+                in_pool = [c for c in cand if c in self.close_df.columns]
+                miss = [c for c in cand if c not in self.close_df.columns]
+                print(f"[GAP-DBG] {dt.date()} raw={n_raw:3d} capped={n_capped} n_pos_today={n_target} "
+                      f"cash={cs:>10.0f} tv={tv:>10.0f} cr={cr:.2%} "
+                      f"cand={cand[:5]} miss_pool={miss[:3]}")
 
         # entries + 卖出信号 + 持仓状态 一次性算好
         entries, exits = self._build_entries_exits_unified(raw_entries)
         return entries, exits
 
-    def _compute_n_positions_per_day(self, raw_entries: pd.DataFrame) -> pd.Series:
+    def _simulate_account_state(
+        self,
+        entries: pd.DataFrame,
+        exits: pd.DataFrame,
+    ) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        """
+        按 entries/exits 重放每日的账户状态，输出 (cash_series, held_value_series, total_value_series)。
+
+        这是账户状态的"唯一真值"——`_build_size_matrix` 和 `_compute_n_positions_per_day`
+        都从这一份重放结果拿数，避免出现"两套算法算出两个 cash"的真值漂移。
+
+        状态机约定（与 _build_size_matrix 完全一致）：
+            * 每日顺序：先用昨日收盘价估持仓市值 → 算 cash / total_value
+              → 处理 buy/sell → 更新 entry_price / entry_value
+            * buy 当日：按 size_pct × total_value 扣 cash，记 entry_price / entry_value
+            * sell 当日：cash 加上卖出金额（这里按 entry_value 收回，忽略价差近似——
+              真实价差由 vbt 的 fees/slippage 处理；这一步只用来决定 n_pos）
+            * sl_stop 模拟：vbt 的 sl_stop 在真实回测里会触发即时清仓，
+              这一步重放时也按"前一日收盘价 ≤ entry_price × (1-sl_stop) → 当日 exits"
+              补到 exits 矩阵上，让 Pass 2 拿到与真实回测一致的现金曲线。
+
+        返回值：三个 pd.Series，index 与 entries.index 对齐。
+            cash_series      可用现金（开盘前状态）
+            held_value_series 持仓市值（按当日收盘价计）
+            total_value_series 总资产 = cash + held_value
+        """
+        close = self.close_df.reindex(columns=entries.columns)
+        close_vals = close.values
+        e = entries.values.astype(bool)
+        x = exits.values.astype(bool)
+        n_days, n_syms = e.shape
+
+        low = float(self.cfg.target_weight_low)
+        high = float(self.cfg.target_weight_high)
+        init_cash = float(self.cfg.init_cash)
+        sl_stop = float(self.cfg.sl_stop) if self.cfg.sl_stop else None
+
+        in_pos = np.zeros(n_syms, dtype=bool)
+        entry_price = np.full(n_syms, np.nan, dtype=np.float64)
+        entry_value = np.zeros(n_syms, dtype=np.float64)
+
+        cash_arr = np.empty(n_days, dtype=np.float64)
+        held_arr = np.empty(n_days, dtype=np.float64)
+        total_arr = np.empty(n_days, dtype=np.float64)
+
+        for i in range(n_days):
+            # ===== 0) sl_stop 模拟（与 vbt 行为对齐）=====
+            # vbt 的 sl_stop 以 entry_price 为基准，日内触发即当日清仓。
+            # 日频近似：用前一日收盘价（i=0 时退化为当日）判定是否破止损，
+            # 一旦命中，把 exits 矩阵对应位置也置 1，让下面的 sell 循环统一处理。
+            if sl_stop is not None and sl_stop > 0:
+                for s in range(n_syms):
+                    if not in_pos[s] or not np.isfinite(entry_price[s]) or entry_price[s] <= 0:
+                        continue
+                    ref_price = close_vals[i - 1, s] if i > 0 else close_vals[i, s]
+                    if np.isfinite(ref_price) and ref_price <= entry_price[s] * (1 - sl_stop):
+                        x[i, s] = 1
+
+            # ===== 1) 用昨日收盘价估当前持仓市值 =====
+            held_value = 0.0
+            for s in range(n_syms):
+                if in_pos[s] and entry_price[s] > 0 and np.isfinite(close_vals[i, s]):
+                    held_value += entry_value[s] * (close_vals[i, s] / entry_price[s])
+            total_invested = float(entry_value[in_pos].sum())
+            cash = init_cash - total_invested + held_value
+            total_value = held_value + cash
+            if total_value <= 0:
+                total_value = init_cash
+
+            cash_arr[i] = cash
+            held_arr[i] = held_value
+            total_arr[i] = total_value
+
+            # ===== 2) 处理今日 sell（先卖后买，T+0 简化） =====
+            for s in range(n_syms):
+                if x[i, s] and in_pos[s]:
+                    in_pos[s] = False
+                    entry_price[s] = np.nan
+                    entry_value[s] = 0.0
+
+            # ===== 3) 处理今日 buy =====
+            buys_today = e[i] & (~in_pos)
+            n_buys_today = int(buys_today.sum())
+            if n_buys_today > 0:
+                # 2026-06-30 改为 equal-split（与 _build_size_matrix 完全一致）：
+                # N × high ≤ 1.0 时每仓 high；否则每仓 = 1/N 等分。
+                per = min(high, 1.0 / n_buys_today)
+                buy_indices = np.where(buys_today)[0]
+                sizes = np.full(n_buys_today, per)
+                # 2026-06-30 修复：现金约束
+                # vbt 真实回测里如果 size_pct × total_value > cash，vbt 会因为 cash_sharing
+                # 自动缩减（或直接不买）。这里必须复刻这个行为，否则 Pass 1 的 entry_value
+                # 会指数级累积（每天 in_pos 不退出又叠加新 buy，total_invested 远超 init_cash），
+                # cash 变天文负数 → cr 完全失真 → Pass 2 永远 n_pos=0。
+                # 策略：按"buy 顺序遍历，扣完一个再看下一个能不能买"
+                for k, s in enumerate(buy_indices):
+                    if sizes[k] <= 0:
+                        continue
+                    pv = sizes[k] * total_value
+                    if pv > cash:
+                        # 现金不够：按"剩余现金 / total_value"折算实际可买比例；
+                        # 若连 low (20%) 都达不到，干脆跳过这只
+                        afford_pct = cash / total_value if total_value > 0 else 0.0
+                        if afford_pct < low:
+                            continue
+                        pv = afford_pct * total_value
+                    in_pos[s] = True
+                    entry_price[s] = close_vals[i, s] if np.isfinite(close_vals[i, s]) else 0.0
+                    entry_value[s] = pv
+                    cash -= pv
+
+        idx = entries.index
+        return (
+            pd.Series(cash_arr, index=idx, name="cash"),
+            pd.Series(held_arr, index=idx, name="held_value"),
+            pd.Series(total_arr, index=idx, name="total_value"),
+        )
+
+    def _compute_n_positions_per_day(
+        self,
+        raw_entries: pd.DataFrame,
+        cash_series: Optional[pd.Series] = None,
+        total_value_series: Optional[pd.Series] = None,
+    ) -> pd.Series:
         """
         根据用户规则 #1.3，按可用现金占总资产的比例决定当天能开的仓位数量：
-            cash_ratio <  1%                → 0 仓（不交易）
-            cash_ratio ∈ [1%, 30%]         → 1 仓
-            cash_ratio ∈ (30%, 70%]        → 2 仓
-            cash_ratio ∈ (70%, 100%]       → 3 仓
+            cash_ratio <  10%               → 0 仓（不交易）
+            cash_ratio ∈ [10%, 30%]         → 1 仓
+            cash_ratio ∈ (30%, 70%]         → 2 仓
+            cash_ratio ∈ (70%, 100%]        → 3 仓
+
+        参数：
+            cash_series / total_value_series
+                真实账户状态，由 `_simulate_account_state` 重放得到。
+                都为 None 时走"估算兜底"模式：用所有股票横截面日均涨幅做指数复利近似，
+                cash 直接取 init_cash（与历史行为一致）。生产路径（build_target_signals
+                的两遍扫描）会传入真实状态。
 
         注意：这里的"可用现金"是**当天开盘前**的估值。
         因为 T 日开盘买入，T 日开盘前还没有今天的订单发生，
-        所以我们可以直接用"昨天的收盘后总资产 - 昨天持仓市值"。
+        所以我们可以直接用"昨天的收盘后总资产 - 昨天持仓市值"，
+        cash_series 已经是这个值（重放时按"先估后成交"计算）。
         """
-        close = self.close_df
-        close_vals = close.reindex(columns=raw_entries.columns).values
-        n_days = close_vals.shape[0]
+        n_days = len(raw_entries.index)
 
-        # 估算每天的开盘前总资产（用前一天收盘价 + 累计现金）
-        # 简化：假设 init_cash = 全部可用现金，每天的净值按 close 走势估算
-        # 用累计"已实现盈亏"：每天按 close / entry_value 缩放后近似
-        # 这里采用最简版本：用前一天的 close 累计值估当天的总资产
-        # 由于这是 N 的预判（用于决定仓位档），精度要求不高
+        # ---- 真实 cash 路径（两遍扫描时传入） ----
+        if cash_series is not None and total_value_series is not None:
+            # 对齐到 raw_entries 的 index
+            cash_aligned = cash_series.reindex(raw_entries.index).fillna(self.cfg.init_cash).values
+            total_aligned = total_value_series.reindex(raw_entries.index).fillna(self.cfg.init_cash).values
+        else:
+            # ---- 兜底：与历史完全一致的估算逻辑 ----
+            # 仅在外部未传入真实状态时使用；保留下来是为了不破坏 BacktestEnv 等
+            # 直接调用本方法做 n_pos 初筛的场景。
+            close = self.close_df
+            close_vals = close.reindex(columns=raw_entries.columns).values
+            avg_daily_return = 0.0
+            if n_days > 1:
+                rets = close_vals[1:n_days] / close_vals[0:n_days-1] - 1
+                rets = rets[~np.isnan(rets)]
+                if len(rets) > 0:
+                    avg_daily_return = float(np.nanmean(rets))
 
-        # 用初始资金 + 累计涨幅近似
-        # 更精确的做法：扫描 entry/exit 后用 entry_value/cash 反算
-        # 这里先用一个简单近似：假设每天的总资产 = 前一天 close 的累计均值 × 初始资金
-        # 真正的总资产在 _build_size_matrix 里算，这里只算"可开仓位数"
-        # 为简化：用 init_cash * (1 + 累计日均收益) 估总资产
-        avg_daily_return = 0.0
-        if n_days > 1:
-            # 用前 60 天均值估计
-            rets = close_vals[1:n_days] / close_vals[0:n_days-1] - 1
-            rets = rets[~np.isnan(rets)]
-            if len(rets) > 0:
-                avg_daily_return = float(np.nanmean(rets))
+            total_aligned = np.empty(n_days, dtype=np.float64)
+            for i in range(n_days):
+                total_aligned[i] = self.cfg.init_cash * ((1 + avg_daily_return) ** i)
+            cash_aligned = np.full(n_days, self.cfg.init_cash, dtype=np.float64)
 
-        total_value_series = np.empty(n_days, dtype=np.float64)
-        for i in range(n_days):
-            total_value_series[i] = self.cfg.init_cash * ((1 + avg_daily_return) ** i)
-
-        # 仓位数
+        # ---- 仓位数决策（2026-06-30 改为参数化查表）----
+        # 语义：th[i] = 启用 (i+1) 仓所需的最低 cash_ratio
+        #   cash < th[0]   → 0 仓
+        #   th[0] ≤ cash < th[1] → 1 仓
+        #   th[1] ≤ cash < th[2] → 2 仓
+        #   ...
+        #   cash ≥ th[-1]  → len(th) 仓
+        # 上限硬约束：min(档位, max_positions)
+        th = tuple(self.cfg.pos_count_cash_thresholds)
+        max_pos = int(self.cfg.max_positions)
         n_pos = np.zeros(n_days, dtype=np.int32)
         for i in range(n_days):
-            # 估算"可用现金"。无持仓时就是全部 init_cash。
-            # 这里用最简近似：可用现金 ≈ init_cash - sum(已开仓 entry_value)
-            # 由于我们没有 entry_value 状态，先按 100% 可用算（保守给最大档）
-            # 这会让 N 偏大，但 _build_size_matrix 会按真实现金二次截断
-            cash = self.cfg.init_cash  # 简化
-            cash_ratio = cash / total_value_series[i] if total_value_series[i] > 0 else 0
-            if cash_ratio < 0.01:
-                n_pos[i] = 0
-            elif cash_ratio <= 0.30:
-                n_pos[i] = 1
-            elif cash_ratio <= 0.70:
-                n_pos[i] = 2
-            else:
-                n_pos[i] = 3
+            tv = float(total_aligned[i])
+            cash = float(cash_aligned[i])
+            cash_ratio = cash / tv if tv > 0 else 0.0
+            n_for_ratio = 0
+            for k, t in enumerate(th):
+                if cash_ratio >= t:
+                    n_for_ratio = k + 1
+                else:
+                    break
+            n_pos[i] = min(n_for_ratio, max_pos)
         return pd.Series(n_pos, index=raw_entries.index, name="n_pos")
 
     def _build_entries_exits_unified(
@@ -1373,8 +1598,8 @@ class BacktestEngine:
         用户原话（重新整理）：
             1. 每支股票仓位占总资金的 20%~30%
             2. 每次买入卖出之后，更新计算可用现金，按可用现金分档：
-                cash < 1%  total_value             → 0 仓（不交易）
-                cash ∈ [1%, 30%] total_value        → 1 仓
+                cash < 10% total_value             → 0 仓（不交易）
+                cash ∈ [10%, 30%] total_value       → 1 仓
                 cash ∈ (30%, 70%] total_value       → 2 仓
                 cash ∈ (70%, 100%] total_value      → 3 仓
             3. 仓位数 N 由 build_target_signals 通过 _compute_n_positions_per_day
@@ -1417,19 +1642,12 @@ class BacktestEngine:
             buys_today = e[i]
             n_buys_today = int(buys_today.sum())
             if n_buys_today > 0:
-                # 用户规则：每仓 20~30% 总资金。
-                # 默认按 high（30%）配置；如果 N × high > 100%，降配
-                # 但最后一个仓位吃剩余（按用户原话"剩余资金按一个仓位算"）
-                target_total = high * n_buys_today
-                if target_total <= 1.0:
-                    # 资金够：每个 buy 占 30%
-                    size_pct[i] = np.where(buys_today, high, 0.0)
-                else:
-                    # 前 N-1 个 30%，最后 1 个吃剩余
-                    size_pct[i] = np.where(buys_today, high, 0.0)
-                    buy_indices = np.where(buys_today)[0]
-                    residual_pct = max(0.0, 1.0 - (n_buys_today - 1) * high)
-                    size_pct[i, buy_indices[-1]] = residual_pct
+                # 2026-06-30 改为 equal-split：
+                # N × high ≤ 1.0 时每仓 high（吃满上限，保持旧行为）；
+                # 否则每仓 = 1/N，等分。N=4→25%、N=5→20%、N=6→16.67%。
+                # 与 _simulate_account_state 的 buy 循环保持完全一致。
+                per = min(high, 1.0 / n_buys_today)
+                size_pct[i] = np.where(buys_today, per, 0.0)
 
             # ===== 更新 in_pos / entry_price / entry_value =====
             for s in range(n_syms):
@@ -1589,12 +1807,17 @@ class BacktestEngine:
         if cfg.use_gpu and _HAS_CUPY:
             self.portfolio = self._run_with_gpu(close, entries, exits)
         else:
+            # 2026-06-30 改为 size_type=Value：每笔 entry 直接给目标金额（人民币元），
+            # 而不是"百分比 × 当前 value"。这样 4 仓真正各占 25% init_cash = 125k，
+            # 不会再因为前一笔 buy 缩小 c.value_now 而缩水。
+            # 同样，把 size_pct（百分比）按 init_cash 换算成"目标金额"再喂给 vbt。
+            size_value = size_pct * float(cfg.init_cash)
             self.portfolio = vbt.Portfolio.from_signals(
                 close=close,
                 entries=entries_bool,
                 exits=exits_bool,
-                size=size_pct,
-                size_type=vbt.portfolio.enums.SizeType.Percent,
+                size=size_value,
+                size_type=vbt.portfolio.enums.SizeType.Value,
                 init_cash=cfg.init_cash,
                 cash_sharing=True,
                 freq="D",
