@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c 'import openpyxl; wb=openpyxl.load_workbook\\(r'\\\\''D:/Quant/01_SwProj/04_VectorBT/02_Lima/Lima_Gen1/03_SignalScan/01_Ashares/01_Z-Strategy/01_Report/ASharesPro_ScanResult_20250618.xlsx'\\\\'', data_only=True\\); *)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import vectorbt as vbt; print\\('vbt', vbt.__version__\\); import sys; print\\('python', sys.version.split\\(\\)[0]\\)\")",
+      "Bash(python -c \"import cupy; print\\('cupy', cupy.__version__\\); print\\('cuda', cupy.cuda.runtime.getDeviceCount\\(\\)\\)\")",
+      "Bash(python -c \"import numba; print\\('numba', numba.__version__\\)\")",
+      "Bash(python -c \"import matplotlib; print\\('matplotlib', matplotlib.__version__\\); import reportlab; print\\('reportlab', reportlab.Version\\)\")",
+      "Bash(python -c \"import fpdf; print\\('fpdf', fpdf.__version__\\)\")",
+      "Bash(python -c \"import pip; print\\('pip', pip.__version__\\)\")",
+      "Bash(python -m pip list)",
+      "Bash(python -m pip install --quiet vectorbt reportlab)",
+      "Bash(python -c \"import vectorbt as vbt; print\\('vbt', vbt.__version__\\)\")",
+      "Bash(python -c \"import reportlab; print\\('reportlab', reportlab.Version\\)\")",
+      "Bash(python Z-Strategy.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 300 python -c ' *)",
+      "Read(//d/DevSw/Anaconda/Lib/site-packages/vectorbt/**)",
+      "Bash(xargs grep -l \"from_order_func\")",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 900 python -c ' *)",
+      "Bash(ls \"C:/Users/45040/.claude/projects/D--Quant-01-SwProj-04-VectorBT-02-Lima-Lima-Gen1/memory/\" 2>&1)",
+      "Bash(python -c \"import reportlab; print\\(reportlab.__version__\\)\")",
+      "Bash(python -m pip show reportlab)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 600 python -c ' *)",
+      "Bash(python)",
+      "Bash(pip install *)",
+      "Bash(python -m pip install akshare -q)",
+      "Bash(PYTHONIOENCODING=utf-8 python)",
+      "Read(//d/Quant/01_SwProj/04_VectorBT/02/Lima/Lima_Gen1/05_BackTest/01_Ashares/**)",
+      "Bash(python -X utf8 -c ' *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('02_DataProcess/01_Ashares/02_WeeklyUpdate/DataUpdate_ASharesWeekly.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK: syntax valid'\\)\")",
+      "Bash(python \"02_DataProcess/01_Ashares/01_DaliyUpdate/AddWeeklyYwLongColumn.py\" --self-check 000008)",
+      "Bash(python \"02_DataProcess/01_Ashares/01_DaliyUpdate/AddWeeklyYwLongColumn.py\")",
+      "Bash(iconv -f utf-8 -t utf-8//IGNORE)",
+      "Bash(PYTHONIOENCODING=utf-8 python _unit_test_equal_split.py)"
+    ]
+  }
+}
